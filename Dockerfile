@@ -100,7 +100,7 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
 
 RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:0 /app /home/headless /opt/venv
 
-EXPOSE 5000
+EXPOSE 5000 5901 6901
 
 USER 1001
 
