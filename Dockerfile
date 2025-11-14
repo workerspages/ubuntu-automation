@@ -56,21 +56,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     sudo \
     fuse \
+    autokey-gtk \
+    autokey-common \
+    python3-gi \
+    gir1.2-gtk-3.0 \
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# 安装 Actiona AppImage，不解压，直接使用 AppImage 文件
-RUN mkdir -p /opt/actiona && \
-    wget -O /opt/actiona/actiona.AppImage https://github.com/Jmgr/actiona/releases/download/v3.11.1/actiona-3.11.1-x86_64.AppImage && \
-    chmod +x /opt/actiona/actiona.AppImage && \
-    ln -s /opt/actiona/actiona.AppImage /usr/local/bin/actiona
-
-# 创建必要目录，权限设置应由宿主机控制，避免容器内 chmod
+# 创建必须目录，权限交给宿主机控制
 RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
 
-# 创建 Python 虚拟环境
+# 创建Python虚拟环境
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -83,7 +81,7 @@ COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 
-# 安装 Firefox 扩展
+# 安装Firefox扩展
 RUN mkdir -p /usr/lib/firefox/distribution && \
     cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/ && \
     echo '{' > /usr/lib/firefox/distribution/policies.json && \
