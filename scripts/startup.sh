@@ -23,21 +23,23 @@ fi
 export DISPLAY=:1
 export XAUTHORITY="/home/$USERNAME/.Xauthority"
 
-/usr/bin/Xvnc :1 \
-    -depth 24 \
-    -geometry 1360x768 \
-    -rfbport 5901 \
-    -auth $XAUTHORITY \
-    -rfbauth /home/$USERNAME/.vncpasswd \
-    -desktop vncdesktop \
-    -pn &
+# 启动VNC服务器
+/usr/bin/Xvnc :1 -depth 24 -geometry 1360x768 -rfbport 5901 \
+    -auth $XAUTHORITY -rfbauth /home/$USERNAME/.vncpasswd \
+    -desktop vncdesktop -pn &
 
 sleep 4
 
+# 启动Xfce桌面环境
 DISPLAY=:1 startxfce4 &
 
 sleep 8
 
+# 启动websockify/noVNC
+/usr/bin/websockify --web=/usr/share/novnc/ 6901 localhost:5901 &
+
+# 启动Flask自动化管理平台
 nohup python3 /app/web-app/app.py &
 
+# 保持容器运行
 tail -f /dev/null
