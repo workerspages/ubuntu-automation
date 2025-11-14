@@ -3,7 +3,6 @@ import sys
 import json
 import logging
 import time
-import random
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +13,7 @@ from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-# 关键补丁: 保证 scripts/ 在包路径
+# 保证 scripts 在包路径
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 app = Flask(__name__)
@@ -108,7 +107,8 @@ def get_available_scripts():
     scripts = []
     if scripts_dir.exists():
         for file in scripts_dir.iterdir():
-            if file.suffix.lower() in ['.side', '.a5s']:
+            # 支持 Selenium .side 和 AutoKey .py 或自定义后缀
+            if file.suffix.lower() in ['.side', '.py', '.autokey']:
                 scripts.append({'name': file.name, 'path': str(file)})
     return scripts
 
@@ -207,12 +207,13 @@ def execute_script(task_id):
     with app.app_context():
         task = db.session.get(Task, task_id)
         if not task:
-            return
+            return False
         script_path = task.script_path.lower()
         if script_path.endswith('.side'):
             return execute_selenium_script(task_id)
-        elif script_path.endswith('.a5s'):
-            return execute_actiona_script(task.script_path)
+        elif script_path.endswith('.py') or script_path.endswith('.autokey'):
+            script_name = Path(task.script_path).stem
+            return execute_autokey_script(script_name)
         else:
             logger.error(f"不支持的脚本类型: {script_path}")
             return False
@@ -231,27 +232,27 @@ def execute_selenium_script(task_id):
             send_telegram_notification(task.name, success, message, bot_token, chat_id)
         return success
 
-def execute_actiona_script(script_path):
+def execute_autokey_script(script_name):
     try:
-        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
-        chat_id = os.environ.get('TELEGRAM_CHAT_ID')
         result = subprocess.run(
-            ['/usr/local/bin/actiona', '-s', script_path],
+            ['autokey-run', '-s', script_name],
             capture_output=True,
             text=True,
             timeout=300
         )
         success = result.returncode == 0
         if success:
-            logger.info("Actiona脚本执行成功")
+            logger.info(f"AutoKey脚本 {script_name} 执行成功")
         else:
-            logger.error(f"Actiona脚本执行失败: {result.stderr}")
+            logger.error(f"AutoKey脚本执行失败: {result.stderr}")
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        chat_id = os.environ.get('TELEGRAM_CHAT_ID')
         if bot_token and chat_id:
             from scripts.task_executor import send_telegram_notification
-            send_telegram_notification(Path(script_path).name, success, result.stdout + result.stderr, bot_token, chat_id)
+            send_telegram_notification(script_name, success, result.stdout + result.stderr, bot_token, chat_id)
         return success
     except Exception as e:
-        logger.error(f"执行Actiona脚本异常: {e}")
+        logger.error(f"执行AutoKey脚本异常: {e}")
         return False
 
 if __name__ == '__main__':
