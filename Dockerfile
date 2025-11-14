@@ -55,23 +55,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
     sudo \
-    wget \
     fuse \
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# 安装Actiona AppImage
+# 安装Actiona AppImage及解压，避免FUSE问题
 RUN mkdir -p /opt/actiona && \
     wget -O /opt/actiona/actiona.AppImage https://github.com/Jmgr/actiona/releases/download/v3.11.1/actiona-3.11.1-x86_64.AppImage && \
-    chmod +x /opt/actiona/actiona.AppImage
+    chmod +x /opt/actiona/actiona.AppImage && \
+    cd /opt/actiona && \
+    ./actiona.AppImage --appimage-extract && \
+    chmod +x /opt/actiona/squashfs-root/AppRun && \
+    ln -s /opt/actiona/squashfs-root/AppRun /usr/local/bin/actiona
 
-# 创建目录，修改权限
-RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs && \
-#   chmod -R 777 /home/headless/Downloads /app/data /app/logs
+# 创建目录，移除chmod操作，权限应在宿主机设置
+RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
 
-# 创建虚拟环境
+# 创建Python虚拟环境
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
