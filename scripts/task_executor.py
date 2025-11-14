@@ -50,10 +50,14 @@ class SeleniumIDEExecutor:
         self.script_path = script_path
         self.driver = None
         self.variables = {}
+        self.base_url = ''
         
     def setup_driver(self):
         """初始化WebDriver - 可视化模式，支持反检测"""
         try:
+            # 首先设置 DISPLAY 环境变量
+            os.environ['DISPLAY'] = ':1'
+            
             options = Options()
             
             # 不使用无头模式 - 在VNC中可见
@@ -69,9 +73,6 @@ class SeleniumIDEExecutor:
             options.set_preference('useAutomationExtension', False)
             options.set_preference('general.useragent.override', 
                                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-            
-            # 使用 VNC 的显示服务器
-            os.environ['DISPLAY'] = ':1'
             
             self.driver = webdriver.Firefox(options=options)
             self.driver.implicitly_wait(10)
@@ -106,6 +107,12 @@ class SeleniumIDEExecutor:
         try:
             with open(self.script_path, 'r', encoding='utf-8') as f:
                 script_data = json.load(f)
+            
+            # 读取 base URL
+            if 'url' in script_data:
+                self.base_url = script_data['url']
+                logger.info(f"读取到 base URL: {self.base_url}")
+            
             logger.info(f"成功加载脚本: {self.script_path}")
             return script_data
         except Exception as e:
@@ -138,7 +145,27 @@ class SeleniumIDEExecutor:
             logger.info(f"执行命令: {cmd} | {target} | {value}")
             
             if cmd == 'open':
-                self.driver.get(target if target.startswith('http') else f"http://{target}")
+                # 智能处理 URL
+                if target.startswith('http://') or target.startswith('https://'):
+                    # 完整 URL
+                    url = target
+                elif target.startswith('/'):
+                    # 相对路径
+                    if self.base_url:
+                        url = self.base_url.rstrip('/') + target
+                    else:
+                        # 如果没有 base_url，默认使用百度
+                        url = 'https://www.baidu.com' + target
+                        logger.warning(f"未设置 base_url，使用默认: {url}")
+                elif target:
+                    # 不带协议的域名
+                    url = f"https://{target}"
+                else:
+                    # 空目标，使用 base_url
+                    url = self.base_url if self.base_url else 'https://www.baidu.com'
+                
+                logger.info(f"访问 URL: {url}")
+                self.driver.get(url)
             
             elif cmd == 'click':
                 element = self.find_element(target)
@@ -293,8 +320,8 @@ class SeleniumIDEExecutor:
                         return False, error_msg
             
             # 任务完成后保持浏览器打开一段时间（便于观察）
-            logger.info("任务执行完成，浏览器将在5秒后关闭")
-            time.sleep(5)
+            logger.info("任务执行完成，浏览器将在10秒后关闭")
+            time.sleep(10)
             
             duration = (datetime.now() - start_time).total_seconds()
             logger.info(f"脚本执行成功，耗时: {duration:.2f}秒")
