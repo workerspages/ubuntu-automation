@@ -2,125 +2,99 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    # 使用构建好的镜像
     image: ghcr.io/workerspages/ubuntu-automation:latest
-    # 或者本地构建
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
-    
     container_name: ubuntu-automation
     hostname: automation-server
     
-    # 端口映射
     ports:
-      - "5000:5000"    # Web管理界面
-      - "5901:5901"    # VNC端口
-      - "6901:6901"    # noVNC Web端口
+      - "5000:5000"
+      - "5901:5901"
+      - "6901:6901"
     
-    # 环境变量配置
     environment:
-      # VNC配置
-      - VNC_PW=password123                    # VNC密码
-      - VNC_RESOLUTION=1920x1080              # VNC分辨率
-      - VNC_COL_DEPTH=24                      # 颜色深度
+      # ============ VNC配置 ============
+      - VNC_PW=YourStrongPassword123!          # 修改为你的VNC密码
+      - VNC_RESOLUTION=1920x1080               # 桌面分辨率
+      - VNC_COL_DEPTH=24                       # 颜色深度
       
-      # Web应用配置
-      - SECRET_KEY=your-super-secret-key-change-this-in-production
+      # ============ Web应用配置 ============
+      - SECRET_KEY=your-super-secret-key-min-32-chars-long-random-string-here
       - FLASK_ENV=production
       - FLASK_DEBUG=false
+      - HOST=0.0.0.0
+      - PORT=5000
       
-      # Telegram通知配置
-      - TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz    # 替换为你的Bot Token
-      - TELEGRAM_CHAT_ID=-1001234567890                            # 替换为你的Chat ID
+      # ============ Telegram通知配置 ============
+      # 从 @BotFather 获取Bot Token
+      - TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz123456789
+      # 从 @userinfobot 获取Chat ID（个人聊天或群组ID）
+      - TELEGRAM_CHAT_ID=-1001234567890
       
-      # 时区配置
+      # ============ 时区和语言配置 ============
       - TZ=Asia/Shanghai
       - LANG=zh_CN.UTF-8
       - LANGUAGE=zh_CN:zh
       - LC_ALL=zh_CN.UTF-8
       
-      # 数据库配置
+      # ============ 数据库配置 ============
       - DATABASE_URL=sqlite:////app/data/tasks.db
+      - SQLALCHEMY_DATABASE_URI=sqlite:////app/data/tasks.db
+      - SQLALCHEMY_TRACK_MODIFICATIONS=false
       
-      # 调度器配置
+      # ============ 调度器配置 ============
       - SCHEDULER_TIMEZONE=Asia/Shanghai
-    
-    # 卷挂载 - 持久化数据
+      - SCHEDULER_API_ENABLED=true
+      
+      # ============ Selenium配置 ============
+      - SCRIPTS_DIR=/home/headless/Downloads
+      - MAX_SCRIPT_TIMEOUT=300
+      - RETRY_FAILED_TASKS=true
+      - MAX_RETRIES=3
+      
+      # ============ 日志配置 ============
+      - LOG_LEVEL=INFO
+      - LOG_FILE=/app/data/automation.log
+      
+      # ============ Firefox配置 ============
+      - FIREFOX_BINARY=/usr/bin/firefox
+      - GECKODRIVER_PATH=/usr/bin/geckodriver
+      
     volumes:
-      # 应用数据持久化
       - ./data:/app/data
-      
-      # Selenium脚本目录
       - ./scripts:/home/headless/Downloads
-      
-      # 日志目录
       - ./logs:/app/logs
-      
-      # Firefox配置持久化（可选）
       - ./firefox-profile:/home/headless/.mozilla
-      
-      # 自定义Firefox扩展（如果需要更新）
       - ./firefox-xpi:/app/firefox-xpi:ro
     
-    # 重启策略
     restart: unless-stopped
     
-    # 资源限制
+    # 建议添加以下配置：
+    
+    # 共享内存大小（Selenium和Chrome需要）
+    shm_size: '2gb'
+    
+    # 资源限制（防止容器占用过多资源）
     deploy:
       resources:
         limits:
           cpus: '2.0'
           memory: 4G
         reservations:
-          cpus: '1.0'
-          memory: 2G
+          cpus: '0.5'
+          memory: 1G
     
     # 健康检查
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     
-    # 安全选项
-    security_opt:
-      - seccomp:unconfined
-    
-    # 共享内存大小（Selenium需要）
-    shm_size: '2gb'
-    
-    # 网络模式
+    # 网络配置
     networks:
-      - automation-network
-    
-    # 依赖服务（如果有的话）
-    # depends_on:
-    #   - database
-
-# 可选：添加独立的数据库服务
-# 如果需要使用PostgreSQL或MySQL替代SQLite
-#  postgres:
-#    image: postgres:15-alpine
-#    container_name: automation-db
-#    environment:
-#      - POSTGRES_DB=automation
-#      - POSTGRES_USER=admin
-#      - POSTGRES_PASSWORD=secure_password
-#    volumes:
-#      - postgres-data:/var/lib/postgresql/data
-#    networks:
-#      - automation-network
-#    restart: unless-stopped
+      - automation-net
 
 networks:
-  automation-network:
+  automation-net:
     driver: bridge
-
-volumes:
-  # 如果使用PostgreSQL
-  # postgres-data:
-  #   driver: local
-  automation-data:
-    driver: local
