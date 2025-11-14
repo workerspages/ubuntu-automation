@@ -98,9 +98,24 @@ COPY web-app/ /app/web-app/
 # 复制启动脚本
 COPY scripts/ /app/scripts/
 
-# 安装 Firefox 扩展到系统目录
-RUN mkdir -p /usr/lib/firefox/distribution/extensions && \
-    cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/extensions/
+# 安装 Firefox 扩展（使用 Firefox 策略配置）
+RUN mkdir -p /usr/lib/firefox/distribution && \
+    cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/selenium-ide.xpi && \
+    echo '{' > /usr/lib/firefox/distribution/policies.json && \
+    echo '  "policies": {' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '    "Extensions": {' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '      "Install": [' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '        "file:///usr/lib/firefox/distribution/selenium-ide.xpi"' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '      ]' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '    },' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '    "ExtensionSettings": {' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '      "*": {' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '        "installation_mode": "allowed",' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '        "blocked_install_message": "Custom addons are disabled"' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '      }' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '    }' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '  }' >> /usr/lib/firefox/distribution/policies.json && \
+    echo '}' >> /usr/lib/firefox/distribution/policies.json
 
 # 配置 Firefox 中文界面和字体
 RUN mkdir -p /usr/lib/firefox/defaults/pref && \
