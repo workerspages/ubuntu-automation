@@ -66,6 +66,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4-terminal \
     xfce4-appfinder \
     xfce4-settings \
+    python3-websockify \
+    git \
+    && git clone https://github.com/novnc/noVNC.git /usr/share/novnc \
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
     && apt-get clean \
