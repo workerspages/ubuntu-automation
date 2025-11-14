@@ -42,7 +42,7 @@ class Task(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 @app.route('/')
 def index():
@@ -113,7 +113,9 @@ def manage_tasks():
 @app.route('/api/tasks/<int:task_id>', methods=['GET', 'PUT', 'DELETE'])
 @login_required
 def update_task(task_id):
-    task = Task.query.get_or_404(task_id)
+    task = db.session.get(Task, task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
     
     if request.method == 'GET':
         return jsonify({
@@ -155,7 +157,9 @@ def update_task(task_id):
 @app.route('/api/tasks/<int:task_id>/run', methods=['POST'])
 @login_required
 def run_task_now(task_id):
-    task = Task.query.get_or_404(task_id)
+    task = db.session.get(Task, task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
     execute_selenium_script(task.id)
     return jsonify({'success': True, 'message': '任务已开始执行'})
 
@@ -188,49 +192,49 @@ def schedule_task(task):
             print(f'调度任务失败: {e}')
 
 def execute_selenium_script(task_id):
-    task = Task.query.get(task_id)
-    if not task:
-        return
-    
-    print(f'开始执行任务: {task.name}')
-    task.last_run = datetime.utcnow()
-    
-    try:
-        # 调用 task_executor.py 执行脚本
-        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-        chat_id = os.environ.get('TELEGRAM_CHAT_ID', '')
+    with app.app_context():
+        task = db.session.get(Task, task_id)
+        if not task:
+            return
         
-        result = subprocess.run(
-            [
-                '/opt/venv/bin/python3',
-                '/app/scripts/task_executor.py',
-                task.script_path,
-                bot_token,
-                chat_id
-            ],
-            capture_output=True,
-            text=True,
-            timeout=int(os.environ.get('MAX_SCRIPT_TIMEOUT', 300))
-        )
+        print(f'开始执行任务: {task.name}')
+        task.last_run = datetime.utcnow()
         
-        if result.returncode == 0:
-            task.last_status = 'success'
-            print(f'任务 {task.name} 执行成功')
-        else:
-            task.last_status = 'failed'
-            print(f'任务 {task.name} 执行失败: {result.stderr}')
+        try:
+            bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+            chat_id = os.environ.get('TELEGRAM_CHAT_ID', '')
             
-    except subprocess.TimeoutExpired:
-        task.last_status = 'timeout'
-        print(f'任务 {task.name} 执行超时')
-        send_telegram_notification(task, 'timeout', '脚本执行超时')
+            result = subprocess.run(
+                [
+                    '/opt/venv/bin/python3',
+                    '/app/scripts/task_executor.py',
+                    task.script_path,
+                    bot_token,
+                    chat_id
+                ],
+                capture_output=True,
+                text=True,
+                timeout=int(os.environ.get('MAX_SCRIPT_TIMEOUT', 300))
+            )
+            
+            if result.returncode == 0:
+                task.last_status = 'success'
+                print(f'任务 {task.name} 执行成功')
+            else:
+                task.last_status = 'failed'
+                print(f'任务 {task.name} 执行失败: {result.stderr}')
+                
+        except subprocess.TimeoutExpired:
+            task.last_status = 'timeout'
+            print(f'任务 {task.name} 执行超时')
+            send_telegram_notification(task, 'timeout', '脚本执行超时')
+            
+        except Exception as e:
+            task.last_status = 'error'
+            print(f'任务 {task.name} 执行异常: {e}')
+            send_telegram_notification(task, 'error', str(e))
         
-    except Exception as e:
-        task.last_status = 'error'
-        print(f'任务 {task.name} 执行异常: {e}')
-        send_telegram_notification(task, 'error', str(e))
-    
-    db.session.commit()
+        db.session.commit()
 
 def send_telegram_notification(task, status, error=None):
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
