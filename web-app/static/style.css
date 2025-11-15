@@ -1,3 +1,5 @@
+/* web-app/static/style.css */
+
 body {
     background: linear-gradient(135deg, #505288 0%, #3e387c 100%);
     font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
@@ -13,6 +15,10 @@ nav {
     justify-content: space-between;
     align-items: center;
     height: 64px;
+}
+.nav-content > div {
+    display: flex;
+    align-items: center;
 }
 .logo {
     display: flex;
@@ -43,6 +49,20 @@ nav {
 .logout-btn:hover {
     background: #39397a;
     color: #fff;
+}
+.vnc-btn {
+    color: #fff;
+    text-decoration: none;
+    font-size: 1em;
+    font-weight: 500;
+    border-radius: 18px;
+    padding: 6px 18px;
+    background: #6c63ff;
+    transition: all 0.2s;
+    margin-right: 16px;
+}
+.vnc-btn:hover {
+    background: #505288;
 }
 .container {
     margin: 32px auto;
@@ -356,4 +376,3 @@ input[type="text"]:focus, select:focus {
     width: 230px;
     text-align: center;
 }
-
