@@ -2,35 +2,12 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    image: your-custom-image:latest
+    image: ghcr.io/workerspages/ubuntu-automation:latest
     container_name: ubuntu-automation
-    user: "${UID}:${GID}"
-    hostname: automation-server
-
     ports:
-      - "5000:5000"    # Web管理平台端口
-      - "5901:5901"    # VNC 图形界面端口（传统VNC）
-      - "6901:6901"    # noVNC Web访问端口（浏览器访问VNC）
-
+      - "6901:6901"  # 仅暴露noVNC端口
     environment:
-      # VNC密码，如果没在startup.sh硬编码也可这里设置
-      - VNC_PW=vncpassword
-
-      # Web应用和 Telegram 配置
-      - SECRET_KEY=your-secret-key-here
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=vncpassword
-      - TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
-      - TELEGRAM_CHAT_ID=YOUR_TELEGRAM_CHAT_ID
-      
-      - DISPLAY=:1   # DISPLAY 环境变量用于 GUI 控制
-
-    volumes:
-      - ./data:/app/data
-      - ./Downloads:/home/headless/Downloads
-      - ./firefox-profile:/home/headless/.mozilla
-      - ./scripts:/app/scripts
-
+      - VNC_PW=111111
+      - DISPLAY=:1
     restart: unless-stopped
     shm_size: '2gb'
-
