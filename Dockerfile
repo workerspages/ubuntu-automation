@@ -26,7 +26,7 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
-# 第一批：基础环境及字体
+# 第一批安装
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     fonts-wqy-microhei \
@@ -39,64 +39,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cron \
     sqlite3
 
+# 可能有错误的包容错安装
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
 RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
 
 RUN locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
 
-# 第二批：Python环境
+# Python环境及工具链安装
 RUN apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-venv \
-    python3-dev
+    python3 python3-pip python3-venv python3-dev build-essential pkg-config gcc g++ make libffi-dev libssl-dev libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev
 
 RUN apt-get install -y --no-install-recommends python3-full || true
 
-# 第三批：编译工具及库
-RUN apt-get install -y --no-install-recommends \
-    build-essential \
-    pkg-config \
-    gcc \
-    g++ \
-    make \
-    libffi-dev \
-    libssl-dev \
-    libxml2-dev \
-    libxslt1-dev \
-    zlib1g-dev \
-    libjpeg-dev \
-    libpng-dev
+# X11和桌面依赖安装
+RUN apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 xvfb xfce4-session xfce4-panel xfce4-terminal xfce4-appfinder xfce4-settings dbus-x11
 
-# 第四批：X11和桌面依赖
-RUN apt-get install -y --no-install-recommends \
-    python3-gi \
-    gir1.2-gtk-3.0 \
-    xvfb \
-    xfce4-session \
-    xfce4-panel \
-    xfce4-terminal \
-    xfce4-appfinder \
-    xfce4-settings \
-    dbus-x11
+# 图形和mesa包安装（失败不影响构建）
+RUN apt-get install -y --no-install-recommends libgl1-mesa-glx libegl1-mesa libpci3 mesa-utils || true
 
-# 第五批：图形驱动及mesa
-RUN apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
-    libegl1-mesa \
-    libpci3 \
-    mesa-utils
+# GTK/Gnome 相关及其他
+RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify || true
 
-# 第六批：GTK/Gnome 相关，容错处理
-RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas || true
-RUN apt-get install -y --no-install-recommends dconf-cli || true
-RUN apt-get install -y --no-install-recommends gnome-icon-theme || true
-RUN apt-get install -y --no-install-recommends policykit-1 || true
-
-RUN apt-get install -y --no-install-recommends fuse || true
-RUN apt-get install -y --no-install-recommends python3-websockify || true
-
-# 手动下载并指定正确的autokey-common deb包
+# 手动下载autokey软件包安装
 WORKDIR /tmp
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0-0_all.deb \
@@ -106,7 +70,6 @@ RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-co
 # noVNC安装
 RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc
 
-# 清理APT缓存
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
