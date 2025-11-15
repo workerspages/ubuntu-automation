@@ -26,17 +26,9 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
+# 基础依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    locales \
-    fonts-wqy-microhei \
-    fonts-wqy-zenhei \
-    curl \
-    wget \
-    ca-certificates \
-    sudo \
-    git \
-    cron \
-    sqlite3
+    locales fonts-wqy-microhei fonts-wqy-zenhei curl wget ca-certificates sudo git cron sqlite3
 
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
 RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
@@ -54,13 +46,17 @@ RUN apt-get install -y --no-install-recommends libgl1-mesa-glx libegl1-mesa libp
 
 RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify || true
 
-# Autokey 三个包全装
+# Autokey 三包全装
 WORKDIR /tmp
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-qt_0.96.0_all.deb \
     && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y \
     && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
+
+# 系统配置提前完成
+RUN echo "allowed_users=anybody" > /etc/X11/Xwrapper.config \
+    && mkdir -p /var/run/dbus
 
 RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc
 
@@ -128,8 +124,7 @@ RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
 
 RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:0 /app /home/headless /opt/venv
 
-EXPOSE 5000 5901 6901
-
+# 切换为普通用户，仅做用户目录初始化，避免root权限需求
 USER 1001
 
 CMD ["/app/scripts/startup.sh"]
