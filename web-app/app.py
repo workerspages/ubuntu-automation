@@ -1,3 +1,5 @@
+# web-app/app.py
+
 import os
 import sys
 import json
@@ -85,6 +87,12 @@ def dashboard():
     tasks = Task.query.all()
     scripts = get_available_scripts()
     return render_template('dashboard.html', tasks=tasks, scripts=scripts)
+
+@app.route('/dashboard/vnc')
+@login_required
+def vnc_viewer():
+    """渲染内嵌 VNC 客户端的页面"""
+    return render_template('vnc.html')
 
 @app.route('/favicon.ico')
 def favicon():
