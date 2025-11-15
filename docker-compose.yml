@@ -9,15 +9,14 @@ services:
     environment:
       - VNC_PW=vncpassword
       - SECRET_KEY=your-secret-key-here
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=vncpassword
+      - ADMIN_USERNAME=111111
+      - ADMIN_PASSWORD=111111
       - TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
       - TELEGRAM_CHAT_ID=YOUR_TELEGRAM_CHAT_ID
       - DISPLAY=:1
     volumes:
-    # - ./data:/app/data
+      - ./data:/app/data
       - ./Downloads:/home/headless/Downloads
-    # - ./firefox-profile:/home/headless/.mozilla
-    # - ./scripts:/app/scripts 
+      - ./firefox-profile:/home/headless/.mozilla
     restart: unless-stopped
     shm_size: '2gb'
