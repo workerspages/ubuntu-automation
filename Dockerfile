@@ -26,8 +26,9 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
+# 安装核心依赖，并加入 nginx 和 supervisor
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    locales fonts-wqy-microhei fonts-wqy-zenhei curl wget ca-certificates sudo git cron sqlite3
+    locales fonts-wqy-microhei fonts-wqy-zenhei curl wget ca-certificates sudo git cron sqlite3 nginx supervisor
 
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
 RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
@@ -41,13 +42,12 @@ RUN apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 xvfb xf
 RUN apt-get install -y --no-install-recommends libgl1-mesa-glx libegl1-mesa libpci3 mesa-utils || true
 RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify xautomation x11-utils x11-apps kdialog imagemagick || true
 
-# 下面这行为Selenium全自动化补充setWindowSize和GUI依赖，关键写在USER 1001前
 RUN apt-get update && apt-get install -y --no-install-recommends libgtk-3-0 x11-xserver-utils openbox x11-apps
 
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix
 RUN echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
-RUN mkdir -p /home/headless /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
+RUN mkdir -p /home/headless /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs /var/log/supervisor
 RUN chown -R 1001:1001 /home/headless /app/web-app /app/scripts /app/data /app/logs
 RUN chmod -R u+rwX /home/headless
 
@@ -71,6 +71,12 @@ COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 
+# 复制 supervisord 和 nginx 配置文件
+COPY scripts/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY nginx/default.conf /etc/nginx/sites-available/default
+RUN ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
+# (Firefox Selenium IDE 插件安装部分保持不变)
 RUN mkdir -p /usr/lib/firefox/distribution && \
     cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/ && \
     echo '{' > /usr/lib/firefox/distribution/policies.json && \
@@ -89,6 +95,7 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
     echo '  }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '}' >> /usr/lib/firefox/distribution/policies.json
 
+# (XFCE 相关配置保持不变)
 RUN mkdir -p /home/headless/.vnc && \
     echo '#!/bin/sh' > /home/headless/.vnc/xstartup && \
     echo 'unset SESSION_MANAGER' >> /home/headless/.vnc/xstartup && \
@@ -119,8 +126,11 @@ RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
 
 RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:1001 /app /opt/venv
 
-EXPOSE 5000 5901 6901
+# 暴露 Nginx 将要监听的端口
+EXPOSE 80
 
+# 切换到非 root 用户
 USER 1001
 
-CMD ["/app/scripts/startup.sh"]
+# 使用新的入口脚本启动容器
+CMD ["/app/scripts/entrypoint.sh"]
