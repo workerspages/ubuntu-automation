@@ -1,12 +1,10 @@
 version: '3.8'
-
 services:
   ubuntu-automation:
     image: ubuntu-automation:latest
     container_name: ubuntu-automation
     ports:
       - "5000:5000"
-      - "6901:6901"
     environment:
       - VNC_PW=111111
       - DISPLAY=:1
