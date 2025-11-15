@@ -26,9 +26,18 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
-# 基础依赖
+# 基础包及公共依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    locales fonts-wqy-microhei fonts-wqy-zenhei curl wget ca-certificates sudo git cron sqlite3
+    locales \
+    fonts-wqy-microhei \
+    fonts-wqy-zenhei \
+    curl \
+    wget \
+    ca-certificates \
+    sudo \
+    git \
+    cron \
+    sqlite3
 
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
 RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
@@ -44,9 +53,14 @@ RUN apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 xvfb xf
 
 RUN apt-get install -y --no-install-recommends libgl1-mesa-glx libegl1-mesa libpci3 mesa-utils || true
 
-RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify || true
+RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify xautomation x11-utils x11-apps kdialog imagemagick || true
 
-# Autokey 三包全装
+# 修正X11及ICE权限问题，提前root建好权限，避免黑屏
+RUN mkdir -p /tmp/.ICE-unix && chmod 1777 /tmp/.ICE-unix \
+    && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix \
+    && echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
+
+# Autokey全部三包
 WORKDIR /tmp
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
@@ -54,15 +68,16 @@ RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-co
     && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y \
     && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
 
-# 系统配置提前完成
-RUN echo "allowed_users=anybody" > /etc/X11/Xwrapper.config \
-    && mkdir -p /var/run/dbus
-
+# noVNC安装
 RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc
 
+# 清理缓存
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
+# 用户目录和配置，彻底修正所有权。防止root残留卡住普通用户桌面和firefox
+RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs \
+    && chown -R 1001:1001 /home/headless /app/web-app /app/scripts /app/data /app/logs \
+    && chmod -R u+rwX /home/headless
 
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -122,9 +137,10 @@ RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '  </property>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml && \
     echo '</channel>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml
 
-RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:0 /app /home/headless /opt/venv
+RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:1001 /app /opt/venv
 
-# 切换为普通用户，仅做用户目录初始化，避免root权限需求
+EXPOSE 5000 5901 6901
+
 USER 1001
 
 CMD ["/app/scripts/startup.sh"]
