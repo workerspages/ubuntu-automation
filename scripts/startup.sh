@@ -29,12 +29,18 @@ if [ ! -f "/home/$USERNAME/.vncpasswd" ]; then
   chmod 600 "/home/$USERNAME/.vncpasswd"
 fi
 
+# 启动 dbus
+service dbus start || true
+
 # 设置显示环境变量
 export DISPLAY=:1
 export XAUTHORITY="/home/$USERNAME/.Xauthority"
 
 echo "DISPLAY设置为: $DISPLAY"
 echo "XAUTHORITY设置为: $XAUTHORITY"
+
+# 放宽Xwrapper.config权限（仅容器内安全场景）
+echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
 # 清理可能存在的旧VNC锁文件
 rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
@@ -122,13 +128,13 @@ echo "=========================================="
 # 定期检查服务状态
 while true; do
     sleep 60
-    
+
     # 检查关键服务是否还在运行
     if ! ps -p $VNC_PID > /dev/null; then
         echo "错误: VNC服务器已停止"
         exit 1
     fi
-    
+
     if ! ps -p $FLASK_PID > /dev/null; then
         echo "警告: Flask应用已停止,尝试重启..."
         cd /app/web-app
