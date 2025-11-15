@@ -2,12 +2,14 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    image: ghcr.io/workerspages/ubuntu-automation:latest
+    image: ubuntu-automation:latest
     container_name: ubuntu-automation
     ports:
-      - "6901:6901"  # 仅暴露noVNC端口
+      - "5000:5000"
+      - "6901:6901"
     environment:
       - VNC_PW=111111
       - DISPLAY=:1
+    volumes: []
     restart: unless-stopped
     shm_size: '2gb'
