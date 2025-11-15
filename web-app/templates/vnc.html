@@ -1,0 +1,31 @@
+<!-- web-app/templates/vnc.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>远程桌面 - 自动化管理平台</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* 隐藏滚动条 */
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- 
+        这里的 src 是关键！
+        它指向 Nginx 代理的 /vnc/ 路径。
+        参数 path=vnc/websockify 告诉 noVNC 客户端去连接哪个 WebSocket 路径，
+        Nginx 同样会代理这个 WebSocket 连接。
+    -->
+    <iframe src="/vnc/vnc.html?path=vnc/websockify"></iframe>
+</body>
+</html>
