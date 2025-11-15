@@ -2,21 +2,19 @@
 set -e
 set -x
 
-echo "=========================================="
-echo "启动 Ubuntu 自动化管理平台"
-echo "=========================================="
-
 USERNAME=$(whoami)
 USERID=$(id -u)
 echo "当前用户: $USERNAME (UID: $USERID)"
-
 echo "准备X11环境..."
-# 不删除目录本身，仅清理可能的旧lock文件
+# 只允许用户清理自己的X1锁文件，不动目录本身
 rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
 
 touch /home/$USERNAME/.Xauthority
 chmod 600 /home/$USERNAME/.Xauthority
-xauth generate :1 . trusted 2>/dev/null || true
+
+if [ -z "$(xauth list :1 2>/dev/null)" ]; then
+  xauth generate :1 . trusted || xauth add :1 . $(mcookie)
+fi
 
 if [ ! -f "/home/$USERNAME/.vncpasswd" ]; then
   echo "创建VNC密码文件..."
@@ -75,17 +73,6 @@ echo "Flask应用已启动 (PID: $FLASK_PID)"
 echo "=========================================="
 echo "所有服务启动完成!"
 echo "=========================================="
-echo "VNC端口: 5901 (密码: ${VNC_PW:-vncpassword})"
-echo "noVNC Web访问: http://localhost:6901/vnc.html"
-echo "Web管理平台: http://localhost:5000"
-echo "=========================================="
-echo "进程状态:"
-echo "  VNC (PID: $VNC_PID): $(ps -p $VNC_PID > /dev/null && echo '运行中' || echo '已停止')"
-echo "  Xfce (PID: $XFCE_PID): $(ps -p $XFCE_PID > /dev/null && echo '运行中' || echo '已停止')"
-echo "  noVNC (PID: $NOVNC_PID): $(ps -p $NOVNC_PID > /dev/null && echo '运行中' || echo '已停止')"
-echo "  Flask (PID: $FLASK_PID): $(ps -p $FLASK_PID > /dev/null && echo '运行中' || echo '已停止')"
-echo "=========================================="
-
 while true; do
     sleep 60
     if ! ps -p $VNC_PID > /dev/null; then
