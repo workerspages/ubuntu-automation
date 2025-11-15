@@ -6,7 +6,7 @@ USERNAME=$(whoami)
 USERID=$(id -u)
 echo "当前用户: $USERNAME (UID: $USERID)"
 echo "准备X11环境..."
-# 只允许用户清理自己的X1锁文件，不动目录本身
+
 rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
 
 touch /home/$USERNAME/.Xauthority
@@ -73,6 +73,7 @@ echo "Flask应用已启动 (PID: $FLASK_PID)"
 echo "=========================================="
 echo "所有服务启动完成!"
 echo "=========================================="
+
 while true; do
     sleep 60
     if ! ps -p $VNC_PID > /dev/null; then
