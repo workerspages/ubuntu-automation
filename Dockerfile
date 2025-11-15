@@ -30,6 +30,8 @@ ENV TZ=Asia/Shanghai \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales fonts-wqy-microhei fonts-wqy-zenhei curl wget ca-certificates sudo git cron sqlite3 nginx supervisor
 
+RUN echo "headless ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/headless-nopasswd
+
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
 RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
 RUN locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
