@@ -41,7 +41,6 @@ RUN apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 xvfb xf
 RUN apt-get install -y --no-install-recommends libgl1-mesa-glx libegl1-mesa libpci3 mesa-utils || true
 RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify xautomation x11-utils x11-apps kdialog imagemagick || true
 
-# 下面这行为Selenium全自动化补充setWindowSize和GUI依赖，关键写在USER 1001前
 RUN apt-get update && apt-get install -y --no-install-recommends libgtk-3-0 x11-xserver-utils openbox x11-apps
 
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix
