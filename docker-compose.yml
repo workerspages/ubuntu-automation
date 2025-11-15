@@ -4,10 +4,14 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    image: ghcr.io/workerspages/ubuntu-automation:latest
+    build: .
+    # 如果不想每次都构建，可以推送到自己的镜像仓库后使用 image: your-registry/ubuntu-automation:latest
     container_name: ubuntu-automation
-    user: "${UID:-1001}:${GID:-1001}"
+    # 移除 user 配置，让容器内脚本自己处理权限
     hostname: automation-server
+    ports:
+      # 对外只暴露一个端口，由内部的 Nginx 代理
+      - "8080:80"
     environment:
       # VNC密码
       - VNC_PW=vncpassword
@@ -26,19 +30,7 @@ services:
       - ./data:/app/data
       - ./Downloads:/home/headless/Downloads
       - ./firefox-profile:/home/headless/.mozilla
-      - ./scripts:/app/scripts
+      # scripts 目录已在构建时复制进去，运行时挂载可以方便修改调试
+      - ./scripts:/app/scripts 
     restart: unless-stopped
     shm_size: '2gb'
-
-  nginx-proxy:
-    image: nginx:1.25-alpine
-    container_name: automation-proxy
-    ports:
-      # 对外只暴露这一个端口，作为统一入口
-      - "8080:80"
-    volumes:
-      # 将我们创建的 Nginx 配置挂载到容器中
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - ubuntu-automation # 确保先启动主服务
-    restart: unless-stopped
