@@ -4,33 +4,22 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    build: .
-    # 如果不想每次都构建，可以推送到自己的镜像仓库后使用 image: your-registry/ubuntu-automation:latest
+    image: ghcr.io/workerspages/ubuntu-automation:all-in-one
     container_name: ubuntu-automation
-    # 移除 user 配置，让容器内脚本自己处理权限
-    hostname: automation-server
     ports:
-      # 对外只暴露一个端口，由内部的 Nginx 代理
       - "8080:80"
     environment:
-      # VNC密码
       - VNC_PW=vncpassword
-
-      # Web应用和 Telegram 配置
       - SECRET_KEY=your-secret-key-here
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=vncpassword
       - TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
       - TELEGRAM_CHAT_ID=YOUR_TELEGRAM_CHAT_ID
-      
-      # GUI 显示环境变量
       - DISPLAY=:1
-
     volumes:
-      - ./data:/app/data
+    # - ./data:/app/data
       - ./Downloads:/home/headless/Downloads
-      - ./firefox-profile:/home/headless/.mozilla
-      # scripts 目录已在构建时复制进去，运行时挂载可以方便修改调试
-      - ./scripts:/app/scripts 
+    # - ./firefox-profile:/home/headless/.mozilla
+    # - ./scripts:/app/scripts 
     restart: unless-stopped
     shm_size: '2gb'
