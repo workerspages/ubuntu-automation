@@ -41,7 +41,8 @@ COPY scripts/ /app/scripts/
 
 RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:1001 /app /opt/venv
 
-EXPOSE 5000 6901
+EXPOSE 5000
 
 USER 1001
+
 CMD ["/app/scripts/startup.sh"]
