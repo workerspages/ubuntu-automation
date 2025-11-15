@@ -30,6 +30,7 @@ ENV TZ=Asia/Shanghai \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales fonts-wqy-microhei fonts-wqy-zenhei curl wget ca-certificates sudo git cron sqlite3 nginx supervisor
 
+# 为 headless 用户配置免密 sudo 权限
 RUN echo "headless ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/headless-nopasswd
 
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
@@ -73,17 +74,12 @@ COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 
-# 复制 supervisord 和 nginx 配置文件
 COPY scripts/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY nginx/default.conf /etc/nginx/sites-available/default
 
-# --- 修正点在这里 ---
-# 先强制删除可能存在的默认链接，然后再创建我们自己的链接
-# 最好将多个 RUN 命令合并，以减小镜像层数
 RUN rm -f /etc/nginx/sites-enabled/default && \
     ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
-# (Firefox Selenium IDE 插件安装部分保持不变)
 RUN mkdir -p /usr/lib/firefox/distribution && \
     cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/ && \
     echo '{' > /usr/lib/firefox/distribution/policies.json && \
@@ -92,17 +88,10 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
     echo '      "Install": [' >> /usr/lib/firefox/distribution/policies.json && \
     echo '        "file:///usr/lib/firefox/distribution/selenium-ide.xpi"' >> /usr/lib/firefox/distribution/policies.json && \
     echo '      ]' >> /usr/lib/firefox/distribution/policies.json && \
-    echo '    },' >> /usr/lib/firefox/distribution/policies.json && \
-    echo '    "ExtensionSettings": {' >> /usr/lib/firefox/distribution/policies.json && \
-    echo '      "*": {' >> /usr/lib/firefox/distribution/policies.json && \
-    echo '        "installation_mode": "allowed",' >> /usr/lib/firefox/distribution/policies.json && \
-    echo '        "blocked_install_message": "Custom addons are disabled"' >> /usr/lib/firefox/distribution/policies.json && \
-    echo '      }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '    }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '  }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '}' >> /usr/lib/firefox/distribution/policies.json
 
-# (XFCE 相关配置保持不变)
 RUN mkdir -p /home/headless/.vnc && \
     echo '#!/bin/sh' > /home/headless/.vnc/xstartup && \
     echo 'unset SESSION_MANAGER' >> /home/headless/.vnc/xstartup && \
@@ -133,11 +122,8 @@ RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
 
 RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:1001 /app /opt/venv
 
-# 暴露 Nginx 将要监听的端口
 EXPOSE 80
 
-# 切换到非 root 用户
 USER 1001
 
-# 使用新的入口脚本启动容器
-CMD ["/app/scripts/entrypoint.sh"]
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
