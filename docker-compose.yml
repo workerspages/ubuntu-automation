@@ -33,3 +33,4 @@ services:
 
     restart: unless-stopped
     shm_size: '2gb'
+1000
