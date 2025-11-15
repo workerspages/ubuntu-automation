@@ -26,6 +26,7 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
+# 关键依赖补全，含图形/GTK/dbus/mesa/gl/gnome schema与本地X授权
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     language-pack-zh-hans \
@@ -68,6 +69,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4-settings \
     python3-websockify \
     git \
+    dbus-x11 \
+    gsettings-desktop-schemas \
+    dconf-cli \
+    libgl1-mesa-glx \
+    libegl1-mesa \
+    libpci3 \
+    mesa-utils \
+    gnome-settings-daemon \
+    policykit-1 \
+    gnome-icon-theme \
     && git clone https://github.com/novnc/noVNC.git /usr/share/novnc \
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
@@ -127,7 +138,6 @@ RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '  </property>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
     echo '</channel>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
 
-# 禁用屏幕保护程序
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '<?xml version="1.0" encoding="UTF-8"?>' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml && \
     echo '<channel name="xfce4-screensaver" version="1.0">' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml && \
@@ -137,6 +147,7 @@ RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '  </property>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml && \
     echo '</channel>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml
 
+# 关键：给予文件执行权限和目录所有权
 RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:0 /app /home/headless /opt/venv
 
 EXPOSE 5000 5901 6901
