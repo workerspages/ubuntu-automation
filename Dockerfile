@@ -74,7 +74,12 @@ COPY scripts/ /app/scripts/
 # 复制 supervisord 和 nginx 配置文件
 COPY scripts/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY nginx/default.conf /etc/nginx/sites-available/default
-RUN ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
+# --- 修正点在这里 ---
+# 先强制删除可能存在的默认链接，然后再创建我们自己的链接
+# 最好将多个 RUN 命令合并，以减小镜像层数
+RUN rm -f /etc/nginx/sites-enabled/default && \
+    ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 # (Firefox Selenium IDE 插件安装部分保持不变)
 RUN mkdir -p /usr/lib/firefox/distribution && \
