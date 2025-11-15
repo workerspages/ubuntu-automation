@@ -26,6 +26,7 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
+# 第一批依赖，基础环境与桌面组件
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     language-pack-zh-hans \
@@ -80,7 +81,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 手动下载并安装 Autokey deb 包
 WORKDIR /tmp
-
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0-0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0-0_all.deb \
     && dpkg -i autokey-common_0.96.0-0_all.deb autokey-gtk_0.96.0-0_all.deb || apt-get install -f -y \
@@ -89,9 +89,8 @@ RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-co
 # noVNC安装
 RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc
 
-# 清理缓存
-RUN apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# 清理
+RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
 
