@@ -1,20 +1,27 @@
+# docker-compose.yml
+
 version: '3.8'
 
 services:
   ubuntu-automation:
-    image: ghcr.io/workerspages/ubuntu-automation:latest # 建议使用 ghcr.io 的镜像
-    build: . # 如果您本地修改了 Dockerfile，可以使用 build
+    image: ghcr.io/workerspages/ubuntu-automation:latest
     container_name: ubuntu-automation
     user: "${UID:-1001}:${GID:-1001}"
     hostname: automation-server
     environment:
+      # VNC密码
       - VNC_PW=vncpassword
+
+      # Web应用和 Telegram 配置
       - SECRET_KEY=your-secret-key-here
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=vncpassword
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN} # 从 .env 文件读取
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}     # 从 .env 文件读取
+      - TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+      - TELEGRAM_CHAT_ID=YOUR_TELEGRAM_CHAT_ID
+      
+      # GUI 显示环境变量
       - DISPLAY=:1
+
     volumes:
       - ./data:/app/data
       - ./Downloads:/home/headless/Downloads
@@ -30,7 +37,7 @@ services:
       # 对外只暴露这一个端口，作为统一入口
       - "8080:80"
     volumes:
-      # 将我们刚创建的 Nginx 配置挂载到容器中
+      # 将我们创建的 Nginx 配置挂载到容器中
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - ubuntu-automation # 确保先启动主服务
