@@ -1,0 +1,23 @@
+# .gitignore
+
+# 忽略 Python 缓存
+__pycache__/
+*.pyc
+
+# 忽略虚拟环境
+venv/
+/venv
+.venv
+
+# 忽略数据库文件
+*.db
+*.sqlite3
+
+# 忽略数据和日志目录
+data/
+/data
+logs/
+/logs
+
+# 忽略 Firefox 配置文件
+firefox-profile/
