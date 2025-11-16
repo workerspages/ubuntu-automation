@@ -1,4 +1,3 @@
-<!-- web-app/templates/vnc.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -10,7 +9,7 @@
             padding: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden; /* 隐藏滚动条 */
+            overflow: hidden;
         }
         iframe {
             width: 100%;
@@ -20,12 +19,11 @@
     </style>
 </head>
 <body>
-    <!-- 
-        这里的 src 是关键！
-        它指向 Nginx 代理的 /vnc/ 路径。
-        参数 path=vnc/websockify 告诉 noVNC 客户端去连接哪个 WebSocket 路径，
-        Nginx 同样会代理这个 WebSocket 连接。
+    <!--
+        这个 iframe 会加载 noVNC 的自动连接页面。
+        `path=websockify` 参数告诉 noVNC 客户端去连接相对路径 /websockify，
+        这个请求会被我们 Nginx 配置中的 location /websockify 块捕获并正确代理。
     -->
-    <iframe src="/vnc/vnc.html?path=vnc/websockify"></iframe>
+    <iframe src="/novnc/vnc_auto.html?path=websockify"></iframe>
 </body>
 </html>
