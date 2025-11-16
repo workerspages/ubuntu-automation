@@ -26,7 +26,7 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
-# 安装核心依赖，并加入 nginx 和 supervisor
+# 安装核心依赖，确保 nginx 和 supervisor 已包含
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales fonts-wqy-microhei fonts-wqy-zenhei curl wget ca-certificates sudo git cron sqlite3 nginx supervisor
 
@@ -50,7 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgtk-3-0 x11-
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix
 RUN echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
-RUN mkdir -p /home/headless /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs /var/log/supervisor
+RUN mkdir -p /home/headless /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs /var/log/supervisor /var/www/html
 RUN chown -R 1001:1001 /home/headless /app/web-app /app/scripts /app/data /app/logs
 RUN chmod -R u+rwX /home/headless
 
