@@ -263,21 +263,38 @@ def execute_autokey_script(script_name):
 
 if __name__ == '__main__':
     with app.app_context():
+        db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '/')
+        print(f"--- [DATABASE] Checking for database at path: {db_path}", flush=True)
+        
+        # 在操作前检查文件是否存在
+        if os.path.exists(db_path):
+            print(f"--- [DATABASE] File '{db_path}' found before initialization.", flush=True)
+        else:
+            print(f"--- [DATABASE] File '{db_path}' NOT found. A new one will be created.", flush=True)
+
+        # 创建所有表（如果不存在）
         db.create_all()
+        print("--- [DATABASE] db.create_all() executed.", flush=True)
+
         admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
         admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        if not User.query.filter_by(username=admin_username).first():
+        print(f"--- [AUTH] Checking for user '{admin_username}'. Will use password from ENV.", flush=True)
+
+        # 检查管理员用户是否存在
+        existing_user = User.query.filter_by(username=admin_username).first()
+
+        if not existing_user:
+            print(f"--- [AUTH] User '{admin_username}' not found. Creating new admin user.", flush=True)
             user = User(username=admin_username, password=admin_password)
             db.session.add(user)
             db.session.commit()
             print(f'已创建默认管理员账号: {admin_username}')
-        tasks = Task.query.filter_by(enabled=True).all()
-        for task in tasks:
-            try:
-                schedule_task(task)
-                print(f'已加载任务: {task.name}')
-            except Exception as e:
-                print(f'加载任务失败 {task.name}: {e}')
+        else:
+            print(f"--- [AUTH] Found existing user '{admin_username}'. Stored password is '{existing_user.password}'. Skipping user creation.", flush=True)
+            # 这是一个非常有用的调试步骤，可以考虑在未来删除
+            if existing_user.password != admin_password:
+                print(f"--- [AUTH] WARNING: ENV password does not match stored password for '{admin_username}'.", flush=True)
+
     print('='*50)
     print('Selenium 自动化管理平台已启动')
     print(f'Web 界面: http://0.0.0.0:5000')
