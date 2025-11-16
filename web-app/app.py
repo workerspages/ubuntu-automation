@@ -22,7 +22,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
-# 仅仅创建实例，但不在这里初始化
 login_manager = LoginManager()
 login_manager.login_view = 'login'
 
@@ -97,7 +96,7 @@ def dashboard():
     return render_template('dashboard.html', tasks=tasks, scripts=scripts)
 
 @app.route('/dashboard/vnc')
-@login_required
+# @login_required # <--- 暂时注释掉这一行来进行诊断
 def vnc_viewer():
     return render_template('vnc.html')
 
@@ -293,11 +292,7 @@ def execute_autokey_script(script_name):
 
 if __name__ == '__main__':
     with app.app_context():
-        # ==================== 关键修改 ====================
-        # 将 login_manager 的初始化移到这里
-        # 确保在所有路由都已定义之后再将其与 app 关联
         login_manager.init_app(app)
-        # ================================================
         db.create_all()
         admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
         admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
