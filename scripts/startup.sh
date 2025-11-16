@@ -28,13 +28,15 @@ if [ ! -f "/home/$USERNAME/.vncpasswd" ]; then
   chmod 600 "/home/$USERNAME/.vncpasswd"
 fi
 
-# 可选启动 Cloudflare Tunnel
 if [ "$ENABLE_CLOUDFLARE_TUNNEL" = "true" ]; then
     echo "启动 Cloudflare Tunnel..."
-    CF_TUNNEL_CONFIG=${CF_TUNNEL_CONFIG:-/etc/cloudflared/config.yml}
-    cloudflared tunnel --config "$CF_TUNNEL_CONFIG" run > /tmp/cloudflared.log 2>&1 &
-    CF_PID=$!
-    echo "Cloudflare Tunnel PID: $CF_PID"
+    if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ]; then
+        cloudflared tunnel --no-autoupdate run --token "$CLOUDFLARE_TUNNEL_TOKEN" > /tmp/cloudflared.log 2>&1 &
+        CF_PID=$!
+        echo "Cloudflare Tunnel PID: $CF_PID"
+    else
+        echo "缺少 Cloudflare 隧道令牌，隧道未启动"
+    fi
 else
     echo "未启用 Cloudflare Tunnel"
 fi
