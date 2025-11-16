@@ -53,7 +53,6 @@ def load_user(user_id):
 
 @app.errorhandler(Exception)
 def handle_error(e):
-    # 统一处理所有异常，包括 404，使其返回 JSON 格式
     if isinstance(e, HTTPException):
         response = e.get_response()
         response.data = json.dumps({
@@ -111,20 +110,36 @@ def favicon():
 def health():
     return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()}), 200
 
-# 新增的调试路由，用于查看当前应用所有已注册的 URL 规则
 @app.route('/debug/routes')
 def list_routes():
     import urllib
     output = []
     for rule in app.url_map.iter_rules():
         methods = ','.join(rule.methods)
-        # 修正：直接使用 rule.rule，它已经包含了 URL 路径，
-        # 避免了因 url_for 尝试转换参数类型而导致的 bug。
         line = urllib.parse.unquote(f"{rule.endpoint:35s} {methods:20s} {rule.rule}")
         output.append(line)
     
     response_text = "<pre>" + "<h1>Registered Routes</h1>" + "\n".join(sorted(output)) + "</pre>"
     return response_text
+
+# ==================== 新增的终极调试工具 ====================
+@app.route('/debug/show-code')
+def show_code():
+    """读取并显示当前运行的 app.py 文件内容"""
+    try:
+        # Dockerfile 中定义的 WORKDIR 是 /tmp，但我们的应用在 /app/web-app
+        # 所以使用绝对路径
+        app_py_path = '/app/web-app/app.py'
+        with open(app_py_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 对内容进行基础的 HTML 转义，防止浏览器错误解析
+        content_escaped = content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        return f'<h1>Content of {app_py_path}</h1><pre>{content_escaped}</pre>'
+    except Exception as e:
+        return f'<h1>Error reading file</h1><p>{str(e)}</p>', 500
+# ==========================================================
 
 @app.route('/api/scripts', methods=['GET'])
 @login_required
@@ -303,7 +318,7 @@ if __name__ == '__main__':
                 print(f'加载任务失败 {task.name}: {e}')
     print('='*50)
     print('Selenium 自动化管理平台已启动')
-    print(f'Web 界面: http://0.0.0.0:5000')
+    print(f'Web 界面: http://0._0.0.0:5000')
     print(f'默认管理员: {admin_username}')
     print('='*50)
     app.run(host='0.0.0.0', port=5000, debug=False)
