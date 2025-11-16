@@ -12,7 +12,7 @@ set -x
 mkdir -p /var/log/supervisor
 chown headless:headless /var/log/supervisor
 
-# 2. 【关键修复】确保 /app/data 目录存在且 headless 用户可写
+# 2. 确保 /app/data 目录存在且 headless 用户可写
 mkdir -p /app/data
 chown -R headless:headless /app/data
 
@@ -27,10 +27,10 @@ if [ ! -f "/home/headless/.vncpasswd" ]; then
 fi
 
 # 4. 【关键修复】为 X11 显示服务创建授权凭证
-#    这会解决 'Cannot open display' 的问题
+#    这个命令会生成一个 "magic cookie" 并添加到授权文件中，无需一个正在运行的 X server
 touch /home/headless/.Xauthority
 chown headless:headless /home/headless/.Xauthority
-xauth generate :1 . trusted
+sudo -u headless bash -c "xauth add :1 . $(mcookie)"
 
 # 5. 清理旧的 X11 锁文件
 rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
