@@ -7,7 +7,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_from_directory, make_response
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -64,11 +64,23 @@ def handle_error(e):
     logger.exception(e)
     return jsonify({'success': False, 'error': str(e)}), 500
 
+# ==================== 关键修改：修复健康检查 ====================
 @app.route('/')
 def index():
+    """
+    处理根路径请求。
+    如果是平台的健康检查，返回 200 OK。
+    如果是普通用户，重定向到登录或仪表盘页面。
+    """
+    user_agent = request.headers.get('User-Agent', '').lower()
+    # 许多平台的健康检查 User-Agent 包含 "health check" 或 "probe" 字样
+    if 'health' in user_agent or 'probe' in user_agent:
+        return make_response('OK', 200)
+
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
+# =============================================================
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -96,13 +108,8 @@ def dashboard():
     return render_template('dashboard.html', tasks=tasks, scripts=scripts)
 
 @app.route('/dashboard/vnc')
-# @login_required
+@login_required # 恢复安全检查
 def vnc_viewer():
-    return render_template('vnc.html')
-
-@app.route('/remote-desktop')
-def remote_desktop_viewer():
-    """使用一个全新的路径来执行完全相同的任务"""
     return render_template('vnc.html')
 
 @app.route('/favicon.ico')
@@ -125,17 +132,6 @@ def list_routes():
     
     response_text = "<pre>" + "<h1>Registered Routes</h1>" + "\n".join(sorted(output)) + "</pre>"
     return response_text
-
-@app.route('/debug/show-code')
-def show_code():
-    try:
-        app_py_path = '/app/web-app/app.py'
-        with open(app_py_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        content_escaped = content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        return f'<h1>Content of {app_py_path}</h1><pre>{content_escaped}</pre>'
-    except Exception as e:
-        return f'<h1>Error reading file</h1><p>{str(e)}</p>', 500
 
 @app.route('/api/scripts', methods=['GET'])
 @login_required
