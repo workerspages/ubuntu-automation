@@ -39,9 +39,14 @@ rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
 rm -f /etc/nginx/sites-enabled/default
 ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
+# 7. 在 Nginx 的网站根目录创建一个符号链接，指向 noVNC 的文件
+#    这样 /novnc/vnc_auto.html 才能被访问到
+#    -f 选项确保如果链接已存在，会先强制删除再创建
+ln -sf /usr/share/novnc /var/www/html/novnc
+
 EOF
 
 # --- 启动 Supervisor 作为主进程 ---
-# 【关键修复】使用 -E 参数告诉 sudo 保留现有的环境变量
+# 使用 -E 参数告诉 sudo 保留现有的环境变量
 echo "--- Initialization complete. Starting supervisord... ---"
 exec sudo -E /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
