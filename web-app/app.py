@@ -22,8 +22,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+# 仅仅创建实例，但不在这里初始化
 login_manager = LoginManager()
-login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 scheduler = BackgroundScheduler()
@@ -122,24 +122,16 @@ def list_routes():
     response_text = "<pre>" + "<h1>Registered Routes</h1>" + "\n".join(sorted(output)) + "</pre>"
     return response_text
 
-# ==================== 新增的终极调试工具 ====================
 @app.route('/debug/show-code')
 def show_code():
-    """读取并显示当前运行的 app.py 文件内容"""
     try:
-        # Dockerfile 中定义的 WORKDIR 是 /tmp，但我们的应用在 /app/web-app
-        # 所以使用绝对路径
         app_py_path = '/app/web-app/app.py'
         with open(app_py_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        
-        # 对内容进行基础的 HTML 转义，防止浏览器错误解析
         content_escaped = content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        
         return f'<h1>Content of {app_py_path}</h1><pre>{content_escaped}</pre>'
     except Exception as e:
         return f'<h1>Error reading file</h1><p>{str(e)}</p>', 500
-# ==========================================================
 
 @app.route('/api/scripts', methods=['GET'])
 @login_required
@@ -301,6 +293,11 @@ def execute_autokey_script(script_name):
 
 if __name__ == '__main__':
     with app.app_context():
+        # ==================== 关键修改 ====================
+        # 将 login_manager 的初始化移到这里
+        # 确保在所有路由都已定义之后再将其与 app 关联
+        login_manager.init_app(app)
+        # ================================================
         db.create_all()
         admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
         admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
@@ -318,7 +315,7 @@ if __name__ == '__main__':
                 print(f'加载任务失败 {task.name}: {e}')
     print('='*50)
     print('Selenium 自动化管理平台已启动')
-    print(f'Web 界面: http://0._0.0.0:5000')
+    print(f'Web 界面: http://0.0.0.0:5000')
     print(f'默认管理员: {admin_username}')
     print('='*50)
     app.run(host='0.0.0.0', port=5000, debug=False)
