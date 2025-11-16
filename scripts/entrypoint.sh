@@ -26,8 +26,7 @@ if [ ! -f "/home/headless/.vncpasswd" ]; then
   chown -R headless:headless /home/headless/.vnc
 fi
 
-# 4. 【关键修复】为 X11 显示服务创建授权凭证
-#    这个命令会生成一个 "magic cookie" 并添加到授权文件中，无需一个正在运行的 X server
+# 4. 为 X11 显示服务创建授权凭证
 touch /home/headless/.Xauthority
 chown headless:headless /home/headless/.Xauthority
 sudo -u headless bash -c "xauth add :1 . $(mcookie)"
@@ -43,6 +42,6 @@ ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 EOF
 
 # --- 启动 Supervisor 作为主进程 ---
-# 现在，所有环境都已完美准备就绪
+# 【关键修复】使用 -E 参数告诉 sudo 保留现有的环境变量
 echo "--- Initialization complete. Starting supervisord... ---"
-exec sudo /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
+exec sudo -E /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
