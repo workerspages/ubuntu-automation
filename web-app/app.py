@@ -1,4 +1,4 @@
-# web-app/app.py
+# web-app/app.py (最终调试版)
 
 import os
 import sys
@@ -91,7 +91,6 @@ def dashboard():
 @app.route('/dashboard/vnc')
 @login_required
 def vnc_viewer():
-    """渲染内嵌 VNC 客户端的页面"""
     return render_template('vnc.html')
 
 @app.route('/favicon.ico')
@@ -263,41 +262,28 @@ def execute_autokey_script(script_name):
 
 if __name__ == '__main__':
     with app.app_context():
-        db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '/')
-        print(f"--- [DATABASE] Checking for database at path: {db_path}", flush=True)
-        
-        # 在操作前检查文件是否存在
-        if os.path.exists(db_path):
-            print(f"--- [DATABASE] File '{db_path}' found before initialization.", flush=True)
-        else:
-            print(f"--- [DATABASE] File '{db_path}' NOT found. A new one will be created.", flush=True)
+        # --- 【关键调试代码】 ---
+        # 直接打印从环境变量中读取到的值
+        env_username = os.environ.get('ADMIN_USERNAME', 'admin')
+        env_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        print("="*20 + " [DEBUG-AUTH] " + "="*20, flush=True)
+        print(f"--- [DEBUG-AUTH] Username from ENV: '{env_username}'", flush=True)
+        print(f"--- [DEBUG-AUTH] Password from ENV: '{env_password}'", flush=True)
+        print("="*54, flush=True)
 
-        # 创建所有表（如果不存在）
         db.create_all()
-        print("--- [DATABASE] db.create_all() executed.", flush=True)
 
-        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        print(f"--- [AUTH] Checking for user '{admin_username}'. Will use password from ENV.", flush=True)
-
-        # 检查管理员用户是否存在
-        existing_user = User.query.filter_by(username=admin_username).first()
-
-        if not existing_user:
-            print(f"--- [AUTH] User '{admin_username}' not found. Creating new admin user.", flush=True)
-            user = User(username=admin_username, password=admin_password)
+        if not User.query.filter_by(username=env_username).first():
+            print(f"--- [AUTH] User '{env_username}' not found. Creating new admin user.", flush=True)
+            user = User(username=env_username, password=env_password)
             db.session.add(user)
             db.session.commit()
-            print(f'已创建默认管理员账号: {admin_username}')
+            print(f'已创建默认管理员账号: {env_username}')
         else:
-            print(f"--- [AUTH] Found existing user '{admin_username}'. Stored password is '{existing_user.password}'. Skipping user creation.", flush=True)
-            # 这是一个非常有用的调试步骤，可以考虑在未来删除
-            if existing_user.password != admin_password:
-                print(f"--- [AUTH] WARNING: ENV password does not match stored password for '{admin_username}'.", flush=True)
+            print(f"--- [AUTH] User '{env_username}' already exists. Skipping user creation.", flush=True)
 
     print('='*50)
     print('Selenium 自动化管理平台已启动')
     print(f'Web 界面: http://0.0.0.0:5000')
-    print(f'默认管理员: {admin_username}')
     print('='*50)
     app.run(host='0.0.0.0', port=5000, debug=False)
