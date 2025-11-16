@@ -117,12 +117,9 @@ def list_routes():
     import urllib
     output = []
     for rule in app.url_map.iter_rules():
-        options = {}
-        for arg in rule.arguments:
-            options[arg] = f"[{arg}]"
-        
         methods = ','.join(rule.methods)
-        url = url_for(rule.endpoint, **options)
+        # 修正：直接使用 rule.rule，它已经包含了 URL 路径，
+        # 避免了因 url_for 尝试转换参数类型而导致的 bug。
         line = urllib.parse.unquote(f"{rule.endpoint:35s} {methods:20s} {rule.rule}")
         output.append(line)
     
