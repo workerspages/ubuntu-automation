@@ -23,6 +23,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
+login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 scheduler = BackgroundScheduler()
@@ -52,15 +53,12 @@ def load_user(user_id):
 
 @app.errorhandler(Exception)
 def handle_error(e):
+    # 修复：对于 HTTPException，让 Flask 使用默认处理方式
+    # 这样 @login_required 的重定向才能正常工作
     if isinstance(e, HTTPException):
-        response = e.get_response()
-        response.data = json.dumps({
-            "error": f"{e.code} {e.name}: {e.description}",
-            "success": False
-        })
-        response.content_type = "application/json"
-        return response
+        return e
     
+    # 对于其他异常，返回 JSON 错误信息
     logger.exception(e)
     return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -96,7 +94,7 @@ def dashboard():
     return render_template('dashboard.html', tasks=tasks, scripts=scripts)
 
 @app.route('/dashboard/vnc')
-# @login_required # <--- 暂时注释掉这一行来进行诊断
+@login_required
 def vnc_viewer():
     return render_template('vnc.html')
 
@@ -123,11 +121,14 @@ def list_routes():
 
 @app.route('/debug/show-code')
 def show_code():
+    """读取并显示当前运行的 app.py 文件内容"""
     try:
         app_py_path = '/app/web-app/app.py'
         with open(app_py_path, 'r', encoding='utf-8') as f:
             content = f.read()
+        
         content_escaped = content.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
         return f'<h1>Content of {app_py_path}</h1><pre>{content_escaped}</pre>'
     except Exception as e:
         return f'<h1>Error reading file</h1><p>{str(e)}</p>', 500
@@ -292,7 +293,6 @@ def execute_autokey_script(script_name):
 
 if __name__ == '__main__':
     with app.app_context():
-        login_manager.init_app(app)
         db.create_all()
         admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
         admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
