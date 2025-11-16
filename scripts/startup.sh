@@ -2,16 +2,13 @@
 set -e
 set -x
 
-# 获取用户信息
 USERNAME=$(whoami)
 USERID=$(id -u)
 echo "当前用户: $USERNAME (UID: $USERID)"
 
 echo "准备X11环境..."
-# 清理X1锁文件
 rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
 
-# 确保用户目录存在并创建 Xauthority 文件
 if [ ! -d "/home/$USERNAME" ]; then
   mkdir -p "/home/$USERNAME"
   chown $USERID:$USERID "/home/$USERNAME"
@@ -25,14 +22,23 @@ export XAUTHORITY="/home/$USERNAME/.Xauthority"
 echo "DISPLAY设置为: $DISPLAY"
 echo "XAUTHORITY设置为: $XAUTHORITY"
 
-# 如果没有VNC密码文件，创建一个
 if [ ! -f "/home/$USERNAME/.vncpasswd" ]; then
   echo "创建VNC密码文件..."
   echo "${VNC_PW:-vncpassword}" | vncpasswd -f > "/home/$USERNAME/.vncpasswd"
   chmod 600 "/home/$USERNAME/.vncpasswd"
 fi
 
-# 启动 VNC 服务器保证 DISPLAY 可用
+# 可选启动 Cloudflare Tunnel
+if [ "$ENABLE_CLOUDFLARE_TUNNEL" = "true" ]; then
+    echo "启动 Cloudflare Tunnel..."
+    CF_TUNNEL_CONFIG=${CF_TUNNEL_CONFIG:-/etc/cloudflared/config.yml}
+    cloudflared tunnel --config "$CF_TUNNEL_CONFIG" run > /tmp/cloudflared.log 2>&1 &
+    CF_PID=$!
+    echo "Cloudflare Tunnel PID: $CF_PID"
+else
+    echo "未启用 Cloudflare Tunnel"
+fi
+
 echo "启动VNC服务器..."
 /usr/bin/Xvnc :1 -desktop "Ubuntu自动化平台" -geometry 1360x768 -depth 24 \
     -rfbport 5901 -rfbauth "/home/$USERNAME/.vncpasswd" -auth "$XAUTHORITY" \
@@ -48,16 +54,15 @@ if ! ps -p $VNC_PID > /dev/null; then
   exit 1
 fi
 
-# VNC启动后再处理xauth
 if [ -z "$(xauth list :1 2>/dev/null)" ]; then
   xauth generate :1 . trusted || xauth add :1 . $(mcookie)
 fi
 
-# 启动Xfce桌面环境
 echo "启动Xfce桌面环境..."
 DISPLAY=:1 startxfce4 > /tmp/xfce.log 2>&1 &
 XFCE_PID=$!
 sleep 10
+
 if ! ps -p $XFCE_PID > /dev/null; then
   echo "警告: Xfce进程可能已退出，检查日志..."
   cat /tmp/xfce.log
@@ -78,7 +83,6 @@ FLASK_PID=$!
 
 echo "所有服务启动完成!"
 
-# 守护进程，监控关键服务
 while true; do
   sleep 60
   if ! ps -p $VNC_PID > /dev/null; then
