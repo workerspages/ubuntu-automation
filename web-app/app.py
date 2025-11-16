@@ -1,5 +1,3 @@
-# web-app/app.py (最终调试版)
-
 import os
 import sys
 import json
@@ -14,6 +12,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from werkzeug.exceptions import HTTPException
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -54,6 +53,16 @@ def load_user(user_id):
 
 @app.errorhandler(Exception)
 def handle_error(e):
+    # 统一处理所有异常，包括 404，使其返回 JSON 格式
+    if isinstance(e, HTTPException):
+        response = e.get_response()
+        response.data = json.dumps({
+            "error": f"{e.code} {e.name}: {e.description}",
+            "success": False
+        })
+        response.content_type = "application/json"
+        return response
+    
     logger.exception(e)
     return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -101,6 +110,24 @@ def favicon():
 @app.route('/health')
 def health():
     return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()}), 200
+
+# 新增的调试路由，用于查看当前应用所有已注册的 URL 规则
+@app.route('/debug/routes')
+def list_routes():
+    import urllib
+    output = []
+    for rule in app.url_map.iter_rules():
+        options = {}
+        for arg in rule.arguments:
+            options[arg] = f"[{arg}]"
+        
+        methods = ','.join(rule.methods)
+        url = url_for(rule.endpoint, **options)
+        line = urllib.parse.unquote(f"{rule.endpoint:35s} {methods:20s} {rule.rule}")
+        output.append(line)
+    
+    response_text = "<pre>" + "<h1>Registered Routes</h1>" + "\n".join(sorted(output)) + "</pre>"
+    return response_text
 
 @app.route('/api/scripts', methods=['GET'])
 @login_required
@@ -262,28 +289,24 @@ def execute_autokey_script(script_name):
 
 if __name__ == '__main__':
     with app.app_context():
-        # --- 【关键调试代码】 ---
-        # 直接打印从环境变量中读取到的值
-        env_username = os.environ.get('ADMIN_USERNAME', 'admin')
-        env_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        print("="*20 + " [DEBUG-AUTH] " + "="*20, flush=True)
-        print(f"--- [DEBUG-AUTH] Username from ENV: '{env_username}'", flush=True)
-        print(f"--- [DEBUG-AUTH] Password from ENV: '{env_password}'", flush=True)
-        print("="*54, flush=True)
-
         db.create_all()
-
-        if not User.query.filter_by(username=env_username).first():
-            print(f"--- [AUTH] User '{env_username}' not found. Creating new admin user.", flush=True)
-            user = User(username=env_username, password=env_password)
+        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        if not User.query.filter_by(username=admin_username).first():
+            user = User(username=admin_username, password=admin_password)
             db.session.add(user)
             db.session.commit()
-            print(f'已创建默认管理员账号: {env_username}')
-        else:
-            print(f"--- [AUTH] User '{env_username}' already exists. Skipping user creation.", flush=True)
-
+            print(f'已创建默认管理员账号: {admin_username}')
+        tasks = Task.query.filter_by(enabled=True).all()
+        for task in tasks:
+            try:
+                schedule_task(task)
+                print(f'已加载任务: {task.name}')
+            except Exception as e:
+                print(f'加载任务失败 {task.name}: {e}')
     print('='*50)
     print('Selenium 自动化管理平台已启动')
     print(f'Web 界面: http://0.0.0.0:5000')
+    print(f'默认管理员: {admin_username}')
     print('='*50)
     app.run(host='0.0.0.0', port=5000, debug=False)
