@@ -7,32 +7,42 @@ echo "--- Running initialization as root via sudo ---"
 sudo --non-interactive /bin/bash <<'EOF'
 set -x
 
-# 清理 X11 锁文件
-rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
-
-# 确保 Nginx 默认配置不冲突
-rm -f /etc/nginx/sites-enabled/default
-
-# 重新链接我们的配置
-ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-
-# 确保 supervisor 日志目录存在并有正确权限
+# --- 文件系统和权限准备 ---
+# 1. 确保 supervisor 日志目录存在并有正确权限
 mkdir -p /var/log/supervisor
 chown headless:headless /var/log/supervisor
 
-# 创建 VNC 密码文件（如果不存在）
+# 2. 【关键修复】确保 /app/data 目录存在且 headless 用户可写
+mkdir -p /app/data
+chown -R headless:headless /app/data
+
+# --- VNC 和 X11 桌面环境准备 ---
+# 3. 创建 VNC 密码文件（如果不存在）
 if [ ! -f "/home/headless/.vncpasswd" ]; then
   echo "创建 VNC 密码文件..."
   mkdir -p /home/headless/.vnc
-  chown headless:headless /home/headless/.vnc
   echo "${VNC_PW:-vncpassword}" | vncpasswd -f > "/home/headless/.vncpasswd"
   chmod 600 "/home/headless/.vncpasswd"
-  chown headless:headless "/home/headless/.vncpasswd"
+  chown -R headless:headless /home/headless/.vnc
 fi
+
+# 4. 【关键修复】为 X11 显示服务创建授权凭证
+#    这会解决 'Cannot open display' 的问题
+touch /home/headless/.Xauthority
+chown headless:headless /home/headless/.Xauthority
+xauth generate :1 . trusted
+
+# 5. 清理旧的 X11 锁文件
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
+
+# --- Nginx 准备 ---
+# 6. 确保 Nginx 默认配置不冲突
+rm -f /etc/nginx/sites-enabled/default
+ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
 EOF
 
 # --- 启动 Supervisor 作为主进程 ---
-# -n 选项让 supervisord 在前台运行，这是容器主进程的推荐做法
-# supervisord 将以 root 身份运行，并根据配置降权启动各个子进程
+# 现在，所有环境都已完美准备就绪
 echo "--- Initialization complete. Starting supervisord... ---"
 exec sudo /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
