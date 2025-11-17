@@ -107,7 +107,7 @@ def dashboard():
     scripts = get_available_scripts()
     return render_template('dashboard.html', tasks=tasks, scripts=scripts)
 
-@app.route('/dashboard/vnc')
+@app.route('/dashboard/vnc/')
 @login_required
 def vnc_viewer():
     return render_template('vnc.html')
