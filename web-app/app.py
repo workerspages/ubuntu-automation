@@ -108,18 +108,7 @@ def dashboard():
     return render_template('dashboard.html', tasks=tasks, scripts=scripts)
 
 @app.route('/dashboard/vnc')
-@login_required # 恢复安全检查
-
-@app.route('/ping')
-def ping_page():
-    return "Pong! The test route is working correctly."
-
-# ... a few lines below is your existing vnc_viewer function ...
-@app.route('/dashboard/vnc')
 @login_required
-def vnc_viewer():
-    return render_template('vnc.html')
-
 def vnc_viewer():
     return render_template('vnc.html')
 
