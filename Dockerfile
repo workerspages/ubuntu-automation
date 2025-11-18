@@ -141,16 +141,15 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 步骤 3: 配置 Firefox (移除 Snap 依赖,创建符号链接)
+# 步骤 3: 验证并配置 Firefox
 # ===================================================================
-# Ubuntu 22.04 的 Firefox 是 snap 包,需要特殊处理
 RUN if [ -f /usr/bin/firefox ]; then \
-    echo "Firefox 已从 apt 安装"; \
+    echo "✅ Firefox 已从 apt 安装"; \
     elif [ -f /snap/bin/firefox ]; then \
     echo "Firefox 是 snap 包,创建符号链接"; \
     ln -sf /snap/bin/firefox /usr/bin/firefox; \
     else \
-    echo "警告: Firefox 未找到,尝试安装 Chromium 作为备选"; \
+    echo "⚠️ Firefox 未找到,安装 Chromium 作为备选"; \
     apt-get update && apt-get install -y chromium-browser && apt-get clean && rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -176,11 +175,10 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     && chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 步骤 6: 配置 VNC
+# 步骤 6: 创建 VNC 目录 (密码文件将在运行时创建)
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc \
-    && echo "${VNC_PW}" | vncpasswd -f > /home/headless/.vnc/passwd \
-    && chmod 600 /home/headless/.vnc/passwd
+    && chown -R headless:headless /home/headless/.vnc
 
 # 创建 VNC xstartup 脚本
 RUN cat << 'EOF' > /home/headless/.vnc/xstartup
@@ -222,7 +220,8 @@ export XDG_SESSION_DESKTOP=xfce
 exec /usr/bin/startxfce4
 EOF
 
-RUN chmod +x /home/headless/.vnc/xstartup
+RUN chmod +x /home/headless/.vnc/xstartup \
+    && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
 # 步骤 7: 安装 noVNC
@@ -372,7 +371,7 @@ priority=40
 EOF
 
 # ===================================================================
-# 步骤 16: 创建 Entrypoint 脚本
+# 步骤 16: 创建 Entrypoint 脚本 (在运行时创建VNC密码)
 # ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
@@ -389,11 +388,18 @@ if command -v firefox &> /dev/null; then
 elif command -v chromium-browser &> /dev/null; then
     echo "✅ Chromium 已安装"
     chromium-browser --version
-    # 如果使用Chromium,更新环境变量
     export FIREFOX_BINARY=/usr/bin/chromium-browser
 else
     echo "❌ 警告: 未找到浏览器"
 fi
+
+# 创建 VNC 密码文件 (在运行时,这样 vncpasswd 命令肯定可用)
+echo "创建 VNC 密码文件..."
+mkdir -p /home/headless/.vnc
+echo "${VNC_PW:-vncpassword}" | vncpasswd -f > /home/headless/.vnc/passwd
+chmod 600 /home/headless/.vnc/passwd
+chown headless:headless /home/headless/.vnc/passwd
+echo "✅ VNC 密码文件已创建"
 
 # 确保目录存在
 mkdir -p /app/data /app/logs /home/headless/Downloads
