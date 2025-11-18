@@ -210,7 +210,6 @@ RUN pip install --no-cache-dir wheel setuptools \
 # ===================================================================
 # 复制应用及配置
 # ===================================================================
-COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
