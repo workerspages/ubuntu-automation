@@ -117,6 +117,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libjpeg-dev \
     libpng-dev \
+    # Firefox 依赖库
+    libdbus-glib-1-2 \
+    libasound2 \
+    libxtst6 \
     # 其他图形工具
     gsettings-desktop-schemas \
     dconf-cli \
@@ -138,25 +142,20 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 步骤 3: 安装 Firefox 浏览器 (使用 Mozilla 官方仓库)
+# 步骤 3: 安装 Firefox 浏览器 (使用 Mozilla CDN 直接下载)
 # ===================================================================
-# 方法1: 使用 Mozilla 官方仓库 (推荐)
-RUN install -d -m 0755 /etc/apt/keyrings \
-    && wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null \
-    && echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | tee -a /etc/apt/sources.list.d/mozilla.list > /dev/null \
-    && echo 'Package: *\nPin: origin packages.mozilla.org\nPin-Priority: 1000\n' | tee /etc/apt/preferences.d/mozilla \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends firefox \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# 方法2: 如果上面失败,使用直接下载方式 (备选)
-RUN if ! command -v firefox &> /dev/null; then \
-    wget -q "https://download.mozilla.org/?product=firefox-latest&os=linux64&lang=zh-CN" -O /tmp/firefox.tar.bz2 \
+RUN FIREFOX_DOWNLOAD_URL="https://download-installer.cdn.mozilla.net/pub/firefox/releases/latest/linux-x86_64/zh-CN/firefox-latest.tar.bz2" \
+    && wget -O /tmp/firefox.tar.bz2 "$FIREFOX_DOWNLOAD_URL" \
     && tar -xjf /tmp/firefox.tar.bz2 -C /opt/ \
     && ln -s /opt/firefox/firefox /usr/bin/firefox \
-    && rm /tmp/firefox.tar.bz2; \
-    fi
+    && rm /tmp/firefox.tar.bz2
+
+# 或者使用固定版本(更稳定)
+# RUN FIREFOX_VERSION="123.0" \
+#     && wget -O /tmp/firefox.tar.bz2 "https://download-installer.cdn.mozilla.net/pub/firefox/releases/${FIREFOX_VERSION}/linux-x86_64/zh-CN/firefox-${FIREFOX_VERSION}.tar.bz2" \
+#     && tar -xjf /tmp/firefox.tar.bz2 -C /opt/ \
+#     && ln -s /opt/firefox/firefox /usr/bin/firefox \
+#     && rm /tmp/firefox.tar.bz2
 
 # ===================================================================
 # 步骤 4: 安装 GeckoDriver (Selenium WebDriver for Firefox)
@@ -312,17 +311,17 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # ===================================================================
 # 步骤 14: 配置 Firefox Selenium IDE 插件
 # ===================================================================
-RUN mkdir -p /usr/lib/firefox/distribution \
+RUN mkdir -p /opt/firefox/distribution \
     && if [ -f /app/firefox-xpi/selenium-ide.xpi ]; then \
-       cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/; \
+       cp /app/firefox-xpi/selenium-ide.xpi /opt/firefox/distribution/; \
     fi || true
 
-RUN cat << 'EOF' > /usr/lib/firefox/distribution/policies.json
+RUN cat << 'EOF' > /opt/firefox/distribution/policies.json
 {
   "policies": {
     "Extensions": {
       "Install": [
-        "file:///usr/lib/firefox/distribution/selenium-ide.xpi"
+        "file:///opt/firefox/distribution/selenium-ide.xpi"
       ]
     },
     "ExtensionSettings": {
