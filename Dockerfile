@@ -39,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-gi gir1.2-gtk-3.0 xvfb xfce4-session xfce4-panel xfce4-terminal xfce4-appfinder xfce4-settings dbus-x11 \
     libgtk-3-0 x11-xserver-utils openbox
 
-# 步骤 2: 安装可选的包，使用 || true 忽略可能发生的错误 (这是修复关键)
+# 步骤 2: 安装可选的包，使用 || true 忽略可能发生的错误
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
 RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
 RUN apt-get install -y --no-install-recommends python3-full || true
@@ -115,13 +115,29 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
     echo '  }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '}' >> /usr/lib/firefox/distribution/policies.json
 
-# 配置 VNC 启动脚本
-RUN mkdir -p /home/headless/.vnc && \
-    echo '#!/bin/sh' > /home/headless/.vnc/xstartup && \
-    echo 'unset SESSION_MANAGER' >> /home/headless/.vnc/xstartup && \
-    echo 'unset DBUS_SESSION_BUS_ADDRESS' >> /home/headless/.vnc/xstartup && \
-    echo 'exec startxfce4' >> /home/headless/.vnc/xstartup && \
-    chmod +x /home/headless/.vnc/xstartup
+# --- 关键修改：配置一个健壮的 VNC 启动脚本 (xstartup) ---
+RUN \
+    mkdir -p /home/headless/.vnc && \
+    cat <<EOF > /home/headless/.vnc/xstartup
+#!/bin/sh
+#
+# This script is executed by vncserver and is responsible for
+# launching the user's desktop environment.
+
+# Unset session variables to avoid issues with stale sessions
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+# Load X resources (fonts, colors, etc.)
+[ -r /etc/X11/Xresources ] && xrdb /etc/X11/Xresources
+
+# Start the full XFCE4 Desktop Environment
+# This is the key command that loads the panel, window manager, and desktop.
+/usr/bin/startxfce4
+EOF
+
+# 确保脚本是可执行的
+RUN chmod +x /home/headless/.vnc/xstartup
 
 # 配置 XFCE 电源管理器，禁用屏幕关闭
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
