@@ -144,6 +144,15 @@ RUN GECKODRIVER_VERSION="0.34.0" \
     && rm /tmp/geckodriver.tar.gz
 
 # ===================================================================
+# 安装 AutoKey三件套
+# ===================================================================
+RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
+    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
+    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-qt_0.96.0_all.deb \
+    && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y \
+    && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
+
+# ===================================================================
 # 用户和目录
 # ===================================================================
 RUN groupadd -g 1001 headless \
