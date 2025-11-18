@@ -1,5 +1,17 @@
 # ===================================================================
-# 基础镜像及环境变量
+# STAGE 1: Playwright Builder
+# 这个阶段专门用来获取预装好的、对应正确架构的浏览器文件
+# 我们使用微软官方的多平台镜像，它同时支持 amd64 和 arm64
+# ===================================================================
+FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy AS playwright-builder
+
+# 这个镜像里已经包含了所有浏览器，我们不需要再运行 install 命令
+# 我们只需要把它当做一个可靠的文件来源即可
+
+
+# ===================================================================
+# STAGE 2: Final Image
+# 这是你的主构建阶段，从 ubuntu:22.04 开始
 # ===================================================================
 FROM ubuntu:22.04
 
@@ -60,11 +72,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 安装Playwright及浏览器依赖
+# 安装Playwright及浏览器依赖 (现在改为从构建器复制)
 # ===================================================================
-RUN export PLAYWRIGHT_DOWNLOAD_HOST=https://playwright.azureedge.net && \
-    npm install -g playwright && \
-    npx playwright install --with-deps chromium
+# 只安装 playwright 的 npm 包，不执行下载浏览器的命令
+RUN npm install -g playwright
+# 从第一阶段(playwright-builder)复制已经存在的、对应正确架构的浏览器文件
+COPY --from=playwright-builder /ms-playwright/ /ms-playwright/
 
 # ===================================================================
 # 设置时区和语言
