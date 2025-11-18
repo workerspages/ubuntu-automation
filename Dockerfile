@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 步骤 1: 安装依赖（特别注意：tigervnc-standalone-server和tigervnc-tools）
+# 步骤 1: 安装依赖
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -103,7 +103,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libjpeg-dev \
     libpng-dev \
-    firefox \
     gsettings-desktop-schemas \
     dconf-cli \
     gnome-icon-theme \
@@ -123,15 +122,13 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# FireFox配置
+# 安装真正的Firefox (firefox-esr)
 # ===================================================================
-RUN if [ -f /usr/bin/firefox ]; then \
-    echo "✅ Firefox 已从 apt 安装"; \
-    elif [ -f /snap/bin/firefox ]; then \
-    ln -sf /snap/bin/firefox /usr/bin/firefox; \
-    else \
-    apt-get update && apt-get install -y chromium-browser && apt-get clean && rm -rf /var/lib/apt/lists/*; \
-    fi
+RUN apt-get update \
+    && apt-get remove --purge -y firefox snapd \
+    && apt-get install -y firefox-esr \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
 # 安装 GeckoDriver
@@ -144,13 +141,20 @@ RUN GECKODRIVER_VERSION="0.34.0" \
     && rm /tmp/geckodriver.tar.gz
 
 # ===================================================================
-# 安装 AutoKey三件套
+# 安装 AutoKey
 # ===================================================================
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-qt_0.96.0_all.deb \
     && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y \
     && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
+
+# ===================================================================
+# 安装 Cloudflare Tunnel
+# ===================================================================
+RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
+    && dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y \
+    && rm -f cloudflared-linux-amd64.deb
 
 # ===================================================================
 # 用户和目录
@@ -163,14 +167,15 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     && chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# VNC配置信息：核心—用vncpasswd命令生成
+# VNC配置 - 用vncpasswd命令生成密码
 # ===================================================================
-RUN mkdir -p /home/headless/.vnc && \
-    chown headless:headless /home/headless/.vnc && \
-    su - headless -c "echo abcd1234 | vncpasswd -f > /home/headless/.vnc/passwd" && \
-    chmod 600 /home/headless/.vnc/passwd && \
-    chown headless:headless /home/headless/.vnc/passwd
+RUN mkdir -p /home/headless/.vnc \
+    && chown headless:headless /home/headless/.vnc \
+    && su - headless -c "echo ${VNC_PW} | vncpasswd -f > /home/headless/.vnc/passwd" \
+    && chmod 600 /home/headless/.vnc/passwd \
+    && chown headless:headless /home/headless/.vnc/passwd
 
+# VNC xstartup脚本
 RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 #!/bin/sh
 unset SESSION_MANAGER
@@ -203,8 +208,8 @@ export XDG_SESSION_DESKTOP=xfce
 exec /usr/bin/startxfce4
 EOF
 
-RUN chmod +x /home/headless/.vnc/xstartup && \
-    chown headless:headless /home/headless/.vnc/xstartup
+RUN chmod +x /home/headless/.vnc/xstartup \
+    && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
 # noVNC
@@ -214,28 +219,18 @@ RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc \
     && git clone --depth 1 https://github.com/novnc/websockify /usr/share/novnc/utils/websockify \
     && ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
-# ===================================================================
-# Nginx, 其它应用
-# ===================================================================
-RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
-    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
-    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-qt_0.96.0_all.deb \
-    && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y \
-    && rm -f *.deb
-
-RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
-    && dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y \
-    && rm -f cloudflared-linux-amd64.deb
-
 RUN rm -rf /tmp/* /var/tmp/*
 
 # ===================================================================
-# X11 最小配置等，其它内容同之前步骤
+# X11配置
 # ===================================================================
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix \
     && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix \
     && echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
+# ===================================================================
+# XFCE配置
+# ===================================================================
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml
 
 RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
@@ -261,6 +256,9 @@ RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4
 </channel>
 EOF
 
+# ===================================================================
+# Python依赖
+# ===================================================================
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -268,19 +266,23 @@ COPY web-app/requirements.txt /app/web-app/
 RUN pip install --no-cache-dir wheel setuptools \
     && pip install --no-cache-dir -r /app/web-app/requirements.txt
 
+# ===================================================================
+# 复制应用代码
+# ===================================================================
 COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
 RUN if [ -f /app/firefox-xpi/selenium-ide.xpi ]; then \
-    mkdir -p /usr/lib/firefox/distribution /snap/firefox/current/distribution 2>/dev/null || true; \
+    mkdir -p /usr/lib/firefox/distribution /usr/lib/firefox-esr/distribution 2>/dev/null || true; \
     cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/ 2>/dev/null || true; \
-    cp /app/firefox-xpi/selenium-ide.xpi /snap/firefox/current/distribution/ 2>/dev/null || true; \
+    cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox-esr/distribution/ 2>/dev/null || true; \
     fi
 
-# supervisor配置保持不变（同前）
-
+# ===================================================================
+# Supervisor配置
+# ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
 nodaemon=true
@@ -334,8 +336,51 @@ environment=HOME="/home/headless",USER="headless",PATH="/opt/venv/bin:%(ENV_PATH
 priority=40
 EOF
 
-# 其它数据库初始化和entrypoint脚本依原有实现不变
+# ===================================================================
+# 数据库初始化脚本
+# ===================================================================
+RUN cat << 'EOF' > /usr/local/bin/init-database
+#!/usr/bin/env python3
+import sys
+import os
 
+sys.path.insert(0, '/app/web-app')
+
+try:
+    from app import app, db, User
+    
+    with app.app_context():
+        print("创建数据库表...")
+        db.create_all()
+        
+        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        
+        existing_user = User.query.filter_by(username=admin_username).first()
+        if not existing_user:
+            user = User(username=admin_username)
+            user.password = admin_password
+            db.session.add(user)
+            db.session.commit()
+            print(f"✅ 管理员用户已创建: {admin_username}")
+        else:
+            print(f"✅ 管理员用户已存在: {admin_username}")
+        
+        print("数据库初始化完成!")
+        sys.exit(0)
+        
+except Exception as e:
+    print(f"❌ 数据库初始化失败: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+EOF
+
+RUN chmod +x /usr/local/bin/init-database
+
+# ===================================================================
+# Entrypoint脚本
+# ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
 set -e
@@ -346,7 +391,7 @@ echo "==================================="
 
 if command -v firefox &> /dev/null; then
     echo "✅ Firefox 已安装"
-    firefox --version 2>/dev/null || echo "Firefox version: snap package"
+    firefox --version 2>/dev/null || echo "Firefox version: ESR"
 elif command -v chromium-browser &> /dev/null; then
     echo "✅ Chromium 已安装"
     chromium-browser --version
@@ -355,9 +400,9 @@ else
     echo "❌ 警告: 未找到浏览器"
 fi
 
-echo "VNC密码文件: "
+echo "VNC密码文件状态:"
 ls -lh /home/headless/.vnc/passwd
-hexdump -C /home/headless/.vnc/passwd
+hexdump -C /home/headless/.vnc/passwd | head -1
 
 mkdir -p /app/data /app/logs /home/headless/Downloads
 chown -R headless:headless /app /home/headless /opt/venv
@@ -400,6 +445,9 @@ EOF
 
 RUN chmod +x /app/scripts/entrypoint.sh
 
+# ===================================================================
+# 最终权限设置
+# ===================================================================
 RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chown -R www-data:www-data /var/log/nginx /var/lib/nginx 2>/dev/null || true \
     && chmod +x /app/scripts/*.sh 2>/dev/null || true
