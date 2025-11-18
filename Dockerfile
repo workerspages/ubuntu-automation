@@ -59,6 +59,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     locales \
     software-properties-common \
+    gnupg2 \
     # 网络工具
     net-tools \
     iproute2 \
@@ -137,16 +138,25 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 步骤 3: 安装 Firefox 浏览器
+# 步骤 3: 安装 Firefox 浏览器 (使用 Mozilla 官方仓库)
 # ===================================================================
-RUN add-apt-repository ppa:mozillateam/ppa -y \
+# 方法1: 使用 Mozilla 官方仓库 (推荐)
+RUN install -d -m 0755 /etc/apt/keyrings \
+    && wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null \
+    && echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | tee -a /etc/apt/sources.list.d/mozilla.list > /dev/null \
+    && echo 'Package: *\nPin: origin packages.mozilla.org\nPin-Priority: 1000\n' | tee /etc/apt/preferences.d/mozilla \
     && apt-get update \
-    && apt-get install -y --no-install-recommends firefox-esr \
+    && apt-get install -y --no-install-recommends firefox \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 如果 Firefox ESR 不可用,使用 snap 安装
-RUN which firefox || (apt-get update && apt-get install -y snapd && snap install firefox)
+# 方法2: 如果上面失败,使用直接下载方式 (备选)
+RUN if ! command -v firefox &> /dev/null; then \
+    wget -q "https://download.mozilla.org/?product=firefox-latest&os=linux64&lang=zh-CN" -O /tmp/firefox.tar.bz2 \
+    && tar -xjf /tmp/firefox.tar.bz2 -C /opt/ \
+    && ln -s /opt/firefox/firefox /usr/bin/firefox \
+    && rm /tmp/firefox.tar.bz2; \
+    fi
 
 # ===================================================================
 # 步骤 4: 安装 GeckoDriver (Selenium WebDriver for Firefox)
@@ -303,7 +313,9 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # 步骤 14: 配置 Firefox Selenium IDE 插件
 # ===================================================================
 RUN mkdir -p /usr/lib/firefox/distribution \
-    && cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/ || true
+    && if [ -f /app/firefox-xpi/selenium-ide.xpi ]; then \
+       cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/; \
+    fi || true
 
 RUN cat << 'EOF' > /usr/lib/firefox/distribution/policies.json
 {
@@ -324,46 +336,7 @@ RUN cat << 'EOF' > /usr/lib/firefox/distribution/policies.json
 EOF
 
 # ===================================================================
-# 步骤 15: 创建启动脚本
-# ===================================================================
-RUN cat << 'EOF' > /app/scripts/start-vnc.sh
-#!/bin/bash
-set -e
-
-echo "==================================="
-echo "启动 Ubuntu 自动化平台 VNC 服务"
-echo "==================================="
-
-# 设置 VNC 密码
-if [ ! -f /home/headless/.vnc/passwd ]; then
-    mkdir -p /home/headless/.vnc
-    echo "${VNC_PW:-vncpassword}" | vncpasswd -f > /home/headless/.vnc/passwd
-    chmod 600 /home/headless/.vnc/passwd
-fi
-
-# 清理旧的 X 锁文件
-rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
-
-# 启动 VNC 服务器
-echo "启动 VNC 服务器 (TigerVNC)..."
-su - headless -c "vncserver :1 -geometry ${VNC_RESOLUTION:-1360x768} -depth ${VNC_COL_DEPTH:-24} -rfbport ${VNC_PORT:-5901} -localhost no" || true
-
-# 等待 VNC 启动
-sleep 5
-
-# 启动 noVNC
-echo "启动 noVNC..."
-/usr/bin/websockify --web=/usr/share/novnc ${NOVNC_PORT:-6901} localhost:${VNC_PORT:-5901} > /tmp/novnc.log 2>&1 &
-
-echo "VNC 服务启动完成!"
-echo "VNC 端口: ${VNC_PORT:-5901}"
-echo "noVNC 端口: ${NOVNC_PORT:-6901}"
-EOF
-
-RUN chmod +x /app/scripts/start-vnc.sh
-
-# ===================================================================
-# 步骤 16: 创建 Supervisor 配置
+# 步骤 15: 创建 Supervisor 配置
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -419,7 +392,7 @@ priority=40
 EOF
 
 # ===================================================================
-# 步骤 17: 创建 Entrypoint 脚本
+# 步骤 16: 创建 Entrypoint 脚本
 # ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
@@ -450,11 +423,11 @@ EOF
 RUN chmod +x /app/scripts/entrypoint.sh
 
 # ===================================================================
-# 步骤 18: 设置最终权限
+# 步骤 17: 设置最终权限
 # ===================================================================
 RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chown -R www-data:www-data /var/log/nginx /var/lib/nginx 2>/dev/null || true \
-    && chmod +x /app/scripts/*.sh
+    && chmod +x /app/scripts/*.sh 2>/dev/null || true
 
 # 暴露端口
 EXPOSE 5000
