@@ -1,5 +1,5 @@
 # ===================================================================
-# 基础镜像
+# 基础镜像及环境变量
 # ===================================================================
 FROM ubuntu:22.04
 
@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 步骤 1: 安装依赖和Chromium
+# 安装基础依赖和Chromium浏览器（不含firefox）
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -50,35 +50,39 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 iputils-ping supervisor cron sqlite3 fonts-wqy-microhei \
     fonts-wqy-zenhei fonts-noto-cjk fonts-noto-cjk-extra language-pack-zh-hans \
     x11-utils x11-xserver-utils x11-apps xauth xserver-xorg-core xserver-xorg-video-dummy \
-    tigervnc-standalone-server tigervnc-common tigervnc-tools xfce4 xfce4-goodies xfce4-terminal \
-    dbus-x11 libgtk-3-0 libgtk2.0-0 python3 python3-pip python3-venv python3-dev python3-gi python3-xdg python3-websockify \
-    gir1.2-gtk-3.0 build-essential pkg-config gcc g++ make libffi-dev libssl-dev libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev \
-    chromium-browser gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 xautomation kdialog imagemagick nginx nodejs npm \
+    tigervnc-standalone-server tigervnc-common tigervnc-tools \
+    xfce4 xfce4-goodies xfce4-terminal dbus-x11 libgtk-3-0 libgtk2.0-0 \
+    python3 python3-pip python3-venv python3-dev python3-gi python3-xdg python3-websockify \
+    gir1.2-gtk-3.0 build-essential pkg-config gcc g++ make libffi-dev libssl-dev \
+    libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev chromium-browser \
+    gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 \
+    xautomation kdialog imagemagick nginx nodejs npm unzip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 安装Playwright及依赖
+# 安装Playwright及依赖浏览器驱动
 # ===================================================================
 RUN npm install -g playwright \
     && npx playwright install --with-deps
 
 # ===================================================================
-# 设置时区和中文
+# 设置时区与中文环境
 # ===================================================================
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 安装 GeckoDriver
+# 下载并安装GeckoDriver(虽然没有firefox，但保持兼容)
 # ===================================================================
 RUN GECKODRIVER_VERSION="0.34.0" \
-    && wget --timeout=30 --tries=3 -O /tmp/geckodriver.tar.gz "https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz" \
+    && wget --timeout=30 --tries=3 -O /tmp/geckodriver.tar.gz \
+       "https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz" \
     && tar -xzf /tmp/geckodriver.tar.gz -C /usr/bin/ \
     && chmod +x /usr/bin/geckodriver \
     && rm /tmp/geckodriver.tar.gz
 
 # ===================================================================
-# 安装 AutoKey
+# 安装AutoKey工具
 # ===================================================================
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
@@ -87,7 +91,7 @@ RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-co
     && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
 
 # ===================================================================
-# 安装 Cloudflare Tunnel
+# 安装Cloudflare Tunnel
 # ===================================================================
 RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
     && dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y \
@@ -96,7 +100,7 @@ RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/c
 RUN rm -rf /tmp/* /var/tmp/*
 
 # ===================================================================
-# 创建用户和目录
+# 添加 headless 用户和工作目录
 # ===================================================================
 RUN groupadd -g 1001 headless \
     && useradd -u 1001 -g 1001 -m -s /bin/bash headless \
@@ -106,12 +110,15 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     && chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 拷贝Selenium IDE扩展到容器
+# 拷贝Selenium IDE扩展并解压
 # ===================================================================
 COPY addons/selenium-ide.crx /opt/selenium-ide.crx
 
+RUN mkdir -p /opt/selenium-ide-unpacked \
+    && unzip /opt/selenium-ide.crx -d /opt/selenium-ide-unpacked
+
 # ===================================================================
-# VNC密码生成
+# VNC密码配置（8位密码）
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc \
     && chown headless:headless /home/headless/.vnc \
@@ -166,7 +173,7 @@ RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc \
     && ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
 # ===================================================================
-# 其他X11和XFCE配置
+# X11和桌面配置同之前保持
 # ===================================================================
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix \
     && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix \
@@ -198,14 +205,13 @@ RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4
 EOF
 
 # ===================================================================
-# 安装Python虚拟环境及依赖
+# Python虚拟环境 + 依赖
 # ===================================================================
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY web-app/requirements.txt /app/web-app/
-RUN pip install --no-cache-dir wheel setuptools \
-    && pip install --no-cache-dir -r /app/web-app/requirements.txt
+RUN pip install --no-cache-dir wheel setuptools && pip install --no-cache-dir -r /app/web-app/requirements.txt
 
 # ===================================================================
 # 复制应用及配置
@@ -214,6 +220,9 @@ COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
+# ===================================================================
+# 赋予XPI扩展（根据需要保留）
+# ===================================================================
 RUN if [ -f /app/firefox-xpi/selenium-ide.xpi ]; then \
     mkdir -p /usr/lib/firefox-esr/distribution /usr/lib/firefox/distribution 2>/dev/null || true; \
     cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox-esr/distribution/ 2>/dev/null || true; \
@@ -221,7 +230,7 @@ RUN if [ -f /app/firefox-xpi/selenium-ide.xpi ]; then \
     fi
 
 # ===================================================================
-# Supervisor配置 (保持原有)
+# Supervisor配置（不变）
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -277,7 +286,7 @@ priority=40
 EOF
 
 # ===================================================================
-# 数据库初始化脚本（不变）
+# 数据库初始化脚本
 # ===================================================================
 RUN cat << 'EOF' > /usr/local/bin/init-database
 #!/usr/bin/env python3
@@ -319,7 +328,7 @@ EOF
 RUN chmod +x /usr/local/bin/init-database
 
 # ===================================================================
-# Entrypoint脚本（不变）
+# Entrypoint脚本
 # ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
@@ -333,10 +342,10 @@ if command -v chromium-browser &> /dev/null; then
     echo "✅ Chromium 已安装"
     chromium-browser --version
 else
-    echo "❌ 警告: 未找到 Chromium"
+    echo "❌ Chromium 未找到"
 fi
 
-echo "VNC密码文件状态:"
+echo "VNC密码文件:"
 ls -lh /home/headless/.vnc/passwd
 hexdump -C /home/headless/.vnc/passwd | head -1
 
@@ -345,7 +354,7 @@ chown -R headless:headless /app /home/headless /opt/venv
 
 echo "初始化数据库..."
 /usr/local/bin/init-database || {
-    echo "⚠️ 数据库初始化失败,尝试备用方法..."
+    echo "数据库初始化备用方法..."
     cd /app/web-app
     /opt/venv/bin/python3 << 'PYEOF'
 import sys
@@ -381,9 +390,9 @@ EOF
 
 RUN chmod +x /app/scripts/entrypoint.sh
 
-###################################################################
-# 权限，暴露端口等
-###################################################################
+# ===================================================================
+# 权限及端口暴露
+# ===================================================================
 RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chown -R www-data:www-data /var/log/nginx /var/lib/nginx 2>/dev/null || true \
     && chmod +x /app/scripts/*.sh 2>/dev/null || true
