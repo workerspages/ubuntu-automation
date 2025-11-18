@@ -39,6 +39,8 @@ ENV TZ=Asia/Shanghai \
     VNC_RESOLUTION=1360x768 \
     VNC_COL_DEPTH=24 \
     VNC_PW=vncpassword \
+    ADMIN_USERNAME=admin \
+    ADMIN_PASSWORD=admin123 \
     XDG_CONFIG_DIRS=/etc/xdg/xfce4:/etc/xdg \
     XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share \
     XDG_CURRENT_DESKTOP=XFCE \
@@ -83,7 +85,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xauth \
     xserver-xorg-core \
     xserver-xorg-video-dummy \
-    # VNC 服务器 (TigerVNC) - 完整安装
+    # VNC 服务器 (TigerVNC)
     tigervnc-standalone-server \
     tigervnc-common \
     tigervnc-xorg-extension \
@@ -225,49 +227,8 @@ RUN chmod +x /home/headless/.vnc/xstartup \
     && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# 步骤 7: 创建 VNC 密码生成脚本 (使用 Python)
+# 步骤 7: 创建 VNC 密码生成脚本 (使用 Perl)
 # ===================================================================
-RUN cat << 'EOF' > /usr/local/bin/create-vnc-passwd
-#!/usr/bin/env python3
-import sys
-import os
-from d3des import deskey
-
-def create_vnc_passwd(password, filename):
-    """创建 VNC 密码文件"""
-    # VNC 密码最多8个字符
-    password = password[:8].ljust(8, '\0')
-    
-    # VNC 使用 DES 加密,密钥是固定的
-    key = b'\xe8\x4a\xd6\x60\xc4\x72\x1a\xe0'
-    
-    # 加密密码
-    encrypted = bytearray(8)
-    for i in range(8):
-        encrypted[i] = password[i] ^ key[i]
-    
-    # 写入文件
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
-    with open(filename, 'wb') as f:
-        f.write(bytes(encrypted))
-    
-    os.chmod(filename, 0o600)
-    print(f"VNC 密码文件已创建: {filename}")
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        password = os.environ.get('VNC_PW', 'vncpassword')
-    else:
-        password = sys.argv[1]
-    
-    filename = os.path.expanduser('~/.vnc/passwd')
-    if len(sys.argv) >= 3:
-        filename = sys.argv[2]
-    
-    create_vnc_passwd(password, filename)
-EOF
-
-# 简化版本:直接使用 Perl 创建密码(更可靠)
 RUN cat << 'EOF' > /usr/local/bin/create-vnc-passwd
 #!/bin/bash
 set -e
@@ -278,23 +239,20 @@ PASSWD_FILE="${2:-$HOME/.vnc/passwd}"
 # 创建目录
 mkdir -p "$(dirname "$PASSWD_FILE")"
 
-# 使用 Perl 创建 VNC 密码文件 (VNC 使用简单的 DES 加密)
+# 使用 Perl 创建 VNC 密码文件
 perl << 'PERLSCRIPT'
 use strict;
 my $password = $ENV{'VNC_PW'} || 'vncpassword';
-$password = substr($password, 0, 8);  # VNC 密码最多8个字符
-$password .= "\0" x (8 - length($password));  # 填充到8字节
+$password = substr($password, 0, 8);
+$password .= "\0" x (8 - length($password));
 
-# VNC 固定密钥
 my $key = pack("C8", 0xe8, 0x4a, 0xd6, 0x60, 0xc4, 0x72, 0x1a, 0xe0);
 
-# 简单 XOR 加密
 my $encrypted = '';
 for (my $i = 0; $i < 8; $i++) {
     $encrypted .= chr(ord(substr($password, $i, 1)) ^ ord(substr($key, $i, 1)));
 }
 
-# 写入文件
 my $file = $ENV{'HOME'} . '/.vnc/passwd';
 open(my $fh, '>', $file) or die "Cannot write to $file: $!";
 binmode($fh);
@@ -457,7 +415,50 @@ priority=40
 EOF
 
 # ===================================================================
-# 步骤 17: 创建 Entrypoint 脚本
+# 步骤 17: 创建数据库初始化脚本
+# ===================================================================
+RUN cat << 'EOF' > /usr/local/bin/init-database
+#!/usr/bin/env python3
+import sys
+import os
+
+sys.path.insert(0, '/app/web-app')
+
+try:
+    from app import app, db, User
+    from werkzeug.security import generate_password_hash
+    
+    with app.app_context():
+        print("创建数据库表...")
+        db.create_all()
+        
+        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        
+        existing_user = User.query.filter_by(username=admin_username).first()
+        if not existing_user:
+            user = User(username=admin_username)
+            user.password = admin_password
+            db.session.add(user)
+            db.session.commit()
+            print(f"✅ 管理员用户已创建: {admin_username}")
+        else:
+            print(f"✅ 管理员用户已存在: {admin_username}")
+        
+        print("数据库初始化完成!")
+        sys.exit(0)
+        
+except Exception as e:
+    print(f"❌ 数据库初始化失败: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+EOF
+
+RUN chmod +x /usr/local/bin/init-database
+
+# ===================================================================
+# 步骤 18: 创建 Entrypoint 脚本
 # ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
@@ -479,9 +480,11 @@ else
     echo "❌ 警告: 未找到浏览器"
 fi
 
-# 使用自定义脚本创建 VNC 密码文件
+# 创建 VNC 密码文件
 echo "创建 VNC 密码文件..."
-su - headless -c "/usr/local/bin/create-vnc-passwd"
+su - headless -c "/usr/local/bin/create-vnc-passwd" || {
+    echo "⚠️ VNC密码创建失败,使用默认配置"
+}
 
 # 确保目录存在
 mkdir -p /app/data /app/logs /home/headless/Downloads
@@ -490,21 +493,45 @@ mkdir -p /app/data /app/logs /home/headless/Downloads
 chown -R headless:headless /app /home/headless /opt/venv
 
 # 初始化数据库
-if [ ! -f /app/data/tasks.db ]; then
-    echo "初始化数据库..."
+echo "初始化数据库..."
+/usr/local/bin/init-database || {
+    echo "⚠️ 数据库初始化失败,尝试备用方法..."
     cd /app/web-app
-    /opt/venv/bin/python3 -c "from app import db; db.create_all()" || true
-fi
+    /opt/venv/bin/python3 << 'PYEOF'
+import sys
+sys.path.insert(0, '/app/web-app')
+try:
+    from app import app, db, User
+    import os
+    with app.app_context():
+        db.create_all()
+        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        if not User.query.filter_by(username=admin_username).first():
+            user = User(username=admin_username)
+            user.password = admin_password
+            db.session.add(user)
+            db.session.commit()
+            print(f"Admin user {admin_username} created")
+except Exception as e:
+    print(f"Database init failed: {e}")
+    import traceback
+    traceback.print_exc()
+PYEOF
+}
+
+echo "==================================="
+echo "启动服务..."
+echo "==================================="
 
 # 启动 Supervisor
-echo "启动 Supervisor..."
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/services.conf
 EOF
 
 RUN chmod +x /app/scripts/entrypoint.sh
 
 # ===================================================================
-# 步骤 18: 设置最终权限
+# 步骤 19: 设置最终权限
 # ===================================================================
 RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chown -R www-data:www-data /var/log/nginx /var/lib/nginx 2>/dev/null || true \
