@@ -29,27 +29,25 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
-# 一次性更新并安装所有系统级依赖
-# 包括 Nginx (用于反向代理), Supervisor (用于进程管理), 中文字体, Python 环境, 图形界面库等
+# --- 软件包安装 ---
+# 分步安装以提高可读性和错误隔离
+# 步骤 1: 更新软件源并安装核心依赖 (Nginx, Supervisor, Python, 图形界面基础)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # 新增
-    nginx \
-    supervisor \
-    # 基础工具
+    nginx supervisor \
     locales fonts-wqy-microhei fonts-wqy-zenhei curl wget ca-certificates sudo git cron sqlite3 \
-    # 中文语言包和字体
-    language-pack-zh-hans \
-    fonts-noto-cjk fonts-noto-cjk-extra \
-    # Python 环境
     python3 python3-pip python3-venv python3-dev build-essential pkg-config gcc g++ make libffi-dev libssl-dev libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev \
-    python3-full \
-    # XFCE 和图形界面依赖
     python3-gi gir1.2-gtk-3.0 xvfb xfce4-session xfce4-panel xfce4-terminal xfce4-appfinder xfce4-settings dbus-x11 \
-    libgl1-mesa-glx libegl1-mesa libpci3 mesa-utils \
-    gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify xautomation x11-utils x11-apps kdialog imagemagick \
-    libgtk-3-0 x11-xserver-utils openbox \
-    # 安装完成后清理 apt 缓存
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    libgtk-3-0 x11-xserver-utils openbox
+
+# 步骤 2: 安装可选的包，使用 || true 忽略可能发生的错误 (这是修复关键)
+RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
+RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
+RUN apt-get install -y --no-install-recommends python3-full || true
+RUN apt-get install -y --no-install-recommends libgl1-mesa-glx libegl1-mesa libpci3 mesa-utils || true
+RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify xautomation x11-utils x11-apps kdialog imagemagick || true
+
+# 步骤 3: 清理 apt 缓存
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 配置中文环境
 RUN locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
@@ -81,8 +79,8 @@ RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/c
     dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y && \
     rm -f cloudflared-linux-amd64.deb
 
-# 再次清理临时文件
-RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# 清理临时文件
+RUN rm -rf /tmp/* /var/tmp/*
 
 # 创建 Python 虚拟环境
 RUN python3 -m venv /opt/venv
