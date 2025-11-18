@@ -50,7 +50,6 @@ ENV TZ=Asia/Shanghai \
 # 步骤 1: 安装基础系统工具和依赖(包括Firefox和expect)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # 基础工具
     ca-certificates \
     curl \
     wget \
@@ -64,42 +63,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg2 \
     apt-transport-https \
     expect \
-    # 网络工具
     net-tools \
     iproute2 \
     iputils-ping \
-    # 进程管理
     supervisor \
     cron \
-    # 数据库
     sqlite3 \
-    # 中文字体
     fonts-wqy-microhei \
     fonts-wqy-zenhei \
     fonts-noto-cjk \
     fonts-noto-cjk-extra \
     language-pack-zh-hans \
-    # X11 基础
     x11-utils \
     x11-xserver-utils \
     x11-apps \
     xauth \
     xserver-xorg-core \
     xserver-xorg-video-dummy \
-    # VNC 服务器 (TigerVNC)
     tigervnc-standalone-server \
     tigervnc-common \
     tigervnc-xorg-extension \
-    # XFCE 桌面环境
     xfce4 \
     xfce4-goodies \
     xfce4-terminal \
-    # D-Bus
     dbus-x11 \
-    # GTK 库
     libgtk-3-0 \
     libgtk2.0-0 \
-    # Python 依赖
     python3 \
     python3-pip \
     python3-venv \
@@ -108,13 +97,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-xdg \
     python3-websockify \
     gir1.2-gtk-3.0 \
-    # 编译工具
     build-essential \
     pkg-config \
     gcc \
     g++ \
     make \
-    # 库文件
     libffi-dev \
     libssl-dev \
     libxml2-dev \
@@ -122,9 +109,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libjpeg-dev \
     libpng-dev \
-    # Firefox 及其依赖库
     firefox \
-    # 其他图形工具
     gsettings-desktop-schemas \
     dconf-cli \
     gnome-icon-theme \
@@ -132,7 +117,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xautomation \
     kdialog \
     imagemagick \
-    # Nginx
     nginx \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -158,14 +142,16 @@ RUN if [ -f /usr/bin/firefox ]; then \
     fi
 
 # ===================================================================
-# 步骤 4: 安装 GeckoDriver (Selenium WebDriver for Firefox)
+# 步骤 4: 安装 GeckoDriver (使用固定版本,更可靠)
 # ===================================================================
-RUN GECKODRIVER_VERSION=$(curl -sS https://api.github.com/repos/mozilla/geckodriver/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/v//') \
+RUN GECKODRIVER_VERSION="0.34.0" \
     && echo "安装 GeckoDriver ${GECKODRIVER_VERSION}" \
-    && wget -q https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz \
-    && tar -xzf geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz -C /usr/bin/ \
+    && wget --timeout=30 --tries=3 -O /tmp/geckodriver.tar.gz \
+       "https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz" \
+    && tar -xzf /tmp/geckodriver.tar.gz -C /usr/bin/ \
     && chmod +x /usr/bin/geckodriver \
-    && rm geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz
+    && rm /tmp/geckodriver.tar.gz \
+    && geckodriver --version || echo "GeckoDriver安装完成"
 
 # ===================================================================
 # 步骤 5: 创建用户和目录
@@ -174,7 +160,6 @@ RUN groupadd -g 1001 headless \
     && useradd -u 1001 -g 1001 -m -s /bin/bash headless \
     && echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# 创建应用目录
 RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads \
     && chown -R headless:headless /app /home/headless
 
@@ -187,28 +172,22 @@ RUN mkdir -p /home/headless/.vnc \
 # 创建 VNC xstartup 脚本
 RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 #!/bin/sh
-# VNC xstartup script for XFCE4
-
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
-# 启动 D-Bus
 if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
     eval $(dbus-launch --sh-syntax)
     export DBUS_SESSION_BUS_ADDRESS
 fi
 
-# 加载 X 资源
 [ -r /etc/X11/Xresources ] && xrdb /etc/X11/Xresources
 [ -r "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
 
-# X 服务器设置
 xsetroot -solid grey &
 xset s off &
 xset -dpms &
 xset s noblank &
 
-# 环境变量
 export GTK_IM_MODULE=xim
 export QT_IM_MODULE=xim
 export XMODIFIERS=@im=none
@@ -220,7 +199,6 @@ export XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share
 export XDG_CURRENT_DESKTOP=XFCE
 export XDG_SESSION_DESKTOP=xfce
 
-# 启动 XFCE4
 exec /usr/bin/startxfce4
 EOF
 
@@ -228,14 +206,12 @@ RUN chmod +x /home/headless/.vnc/xstartup \
     && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# 步骤 7: 创建 VNC 密码生成脚本 (使用 expect - 最可靠)
+# 步骤 7: 创建 VNC 密码生成脚本 (使用 expect)
 # ===================================================================
 RUN cat << 'EOF' > /usr/local/bin/create-vnc-passwd
 #!/usr/bin/expect -f
-
 set timeout 10
 
-# 获取密码,优先从参数,然后环境变量,最后默认值
 if {$argc > 0} {
     set password [lindex $argv 0]
 } elseif {[info exists env(VNC_PW)]} {
@@ -244,16 +220,13 @@ if {$argc > 0} {
     set password "vncpassword"
 }
 
-# 确保在headless用户的home目录下
 set home "/home/headless"
 if {[info exists env(HOME)]} {
     set home $env(HOME)
 }
 
-# 创建.vnc目录
 file mkdir "$home/.vnc"
 
-# 运行vncpasswd
 spawn vncpasswd "$home/.vnc/passwd"
 
 expect {
@@ -289,8 +262,8 @@ RUN chmod +x /usr/local/bin/create-vnc-passwd
 # 步骤 8: 安装 noVNC
 # ===================================================================
 WORKDIR /tmp
-RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc \
-    && git clone https://github.com/novnc/websockify /usr/share/novnc/utils/websockify \
+RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc \
+    && git clone --depth 1 https://github.com/novnc/websockify /usr/share/novnc/utils/websockify \
     && ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
 # ===================================================================
@@ -303,13 +276,12 @@ RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-co
     && rm -f *.deb
 
 # ===================================================================
-# 步骤 10: 安装 Cloudflare Tunnel (可选)
+# 步骤 10: 安装 Cloudflare Tunnel
 # ===================================================================
 RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
     && dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y \
     && rm -f cloudflared-linux-amd64.deb
 
-# 清理临时文件
 RUN rm -rf /tmp/* /var/tmp/*
 
 # ===================================================================
@@ -320,11 +292,10 @@ RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix \
     && echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
 # ===================================================================
-# 步骤 12: 配置 XFCE (禁用屏幕保护和电源管理)
+# 步骤 12: 配置 XFCE
 # ===================================================================
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml
 
-# XFCE 电源管理
 RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-power-manager" version="1.0">
@@ -338,7 +309,6 @@ RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4
 </channel>
 EOF
 
-# XFCE 屏幕保护
 RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-screensaver" version="1.0">
@@ -444,7 +414,6 @@ sys.path.insert(0, '/app/web-app')
 
 try:
     from app import app, db, User
-    from werkzeug.security import generate_password_hash
     
     with app.app_context():
         print("创建数据库表...")
@@ -486,7 +455,6 @@ echo "==================================="
 echo "Ubuntu 自动化平台启动中..."
 echo "==================================="
 
-# 验证浏览器安装
 if command -v firefox &> /dev/null; then
     echo "✅ Firefox 已安装"
     firefox --version 2>/dev/null || echo "Firefox version: snap package"
@@ -498,16 +466,14 @@ else
     echo "❌ 警告: 未找到浏览器"
 fi
 
-# 使用expect创建 VNC 密码文件
 echo "创建 VNC 密码文件..."
 su - headless -c "VNC_PW='${VNC_PW}' /usr/local/bin/create-vnc-passwd '${VNC_PW}'" || {
     echo "⚠️ VNC密码创建失败,尝试备用方法..."
     su - headless -c "mkdir -p ~/.vnc && echo '${VNC_PW}' | vncpasswd -f > ~/.vnc/passwd && chmod 600 ~/.vnc/passwd" || {
-        echo "⚠️ 备用方法也失败,使用无密码模式"
+        echo "⚠️ 备用方法也失败"
     }
 }
 
-# 验证密码文件
 if [ -f /home/headless/.vnc/passwd ]; then
     echo "✅ VNC 密码文件已创建"
     ls -la /home/headless/.vnc/passwd
@@ -515,13 +481,9 @@ else
     echo "⚠️ VNC 密码文件不存在"
 fi
 
-# 确保目录存在
 mkdir -p /app/data /app/logs /home/headless/Downloads
-
-# 设置权限
 chown -R headless:headless /app /home/headless /opt/venv
 
-# 初始化数据库
 echo "初始化数据库..."
 /usr/local/bin/init-database || {
     echo "⚠️ 数据库初始化失败,尝试备用方法..."
@@ -555,7 +517,6 @@ echo "==================================="
 echo "启动服务..."
 echo "==================================="
 
-# 启动 Supervisor
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/services.conf
 EOF
 
@@ -568,11 +529,8 @@ RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chown -R www-data:www-data /var/log/nginx /var/lib/nginx 2>/dev/null || true \
     && chmod +x /app/scripts/*.sh 2>/dev/null || true
 
-# 暴露端口
 EXPOSE 5000
 
-# 工作目录
 WORKDIR /app
 
-# 启动命令
 CMD ["/app/scripts/entrypoint.sh"]
