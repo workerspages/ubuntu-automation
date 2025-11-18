@@ -1,4 +1,4 @@
-# ===================================================================
+# = a==================================================================
 # STAGE 1: Playwright Builder
 # 这个阶段专门用来获取预装好的、对应正确架构的浏览器文件
 # 我们使用微软官方的多平台镜像，它同时支持 amd64 和 arm64
@@ -122,13 +122,12 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 下载并解压Selenium IDE扩展 (修改为更可靠的下载方式)
+# 下载并解压Selenium IDE扩展 (最终修复版)
 # ===================================================================
-RUN SELENIUM_IDE_VERSION="3.17.2" && \
-    wget --tries=3 -O /tmp/selenium-ide.zip "https://github.com/SeleniumHQ/selenium-ide/releases/download/v${SELENIUM_IDE_VERSION}/selenium-ide-${SELENIUM_IDE_VERSION}-chrome.zip" && \
+RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/workerspages/ubuntu-automation/aio/addons/selenium-ide.crx" && \
     mkdir -p /opt/selenium-ide-unpacked && \
-    unzip -o /tmp/selenium-ide.zip -d /opt/selenium-ide-unpacked && \
-    rm /tmp/selenium-ide.zip
+    unzip /tmp/selenium-ide.crx -d /opt/selenium-ide-unpacked && \
+    rm /tmp/selenium-ide.crx
 
 # ===================================================================
 # 配置VNC密码
