@@ -1,5 +1,5 @@
 # ===================================================================
-# 基础镜像和环境变量
+# 基础镜像及环境变量
 # ===================================================================
 FROM ubuntu:22.04
 
@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装依赖和Chromium浏览器
+# 安装系统依赖及Chromium浏览器
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -56,78 +56,76 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gir1.2-gtk-3.0 build-essential pkg-config gcc g++ make libffi-dev libssl-dev \
     libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev chromium-browser \
     gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 \
-    xautomation kdialog imagemagick nginx nodejs npm unzip \
+    xautomation kdialog imagemagick nginx nodejs npm unzip libnss3 libatk-bridge2.0-0 libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 安装 Playwright 及其浏览器
+# 安装Playwright及浏览器依赖
 # ===================================================================
 RUN npm install -g playwright \
-    && npx playwright install --with-deps
+    && npx playwright install
 
 # ===================================================================
-# 时区和语言环境设置
+# 设置时区和语言
 # ===================================================================
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 下载并安装 GeckoDriver
+# 安装GeckoDriver
 # ===================================================================
-RUN GECKODRIVER_VERSION="0.34.0" \
-    && wget --timeout=30 --tries=3 -O /tmp/geckodriver.tar.gz \
-       "https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz" \
-    && tar -xzf /tmp/geckodriver.tar.gz -C /usr/bin/ \
-    && chmod +x /usr/bin/geckodriver \
-    && rm /tmp/geckodriver.tar.gz
+RUN GECKODRIVER_VERSION="0.34.0" && \
+    wget --timeout=30 --tries=3 -O /tmp/geckodriver.tar.gz \
+    "https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz" && \
+    tar -xzf /tmp/geckodriver.tar.gz -C /usr/bin/ && \
+    chmod +x /usr/bin/geckodriver && \
+    rm /tmp/geckodriver.tar.gz
 
 # ===================================================================
-# 安装 AutoKey
+# 安装AutoKey三件套
 # ===================================================================
-RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
-    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
-    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-qt_0.96.0_all.deb \
-    && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y \
-    && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
+RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb && \
+    wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb && \
+    wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-qt_0.96.0_all.deb && \
+    dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y && \
+    rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
 
 # ===================================================================
 # 安装Cloudflare Tunnel
 # ===================================================================
-RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
-    && dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y \
-    && rm -f cloudflared-linux-amd64.deb
+RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
+    dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y && \
+    rm -f cloudflared-linux-amd64.deb
 
 RUN rm -rf /tmp/* /var/tmp/*
 
 # ===================================================================
-# 创建headless用户和目录
+# 创建用户与目录
 # ===================================================================
-RUN groupadd -g 1001 headless \
-    && useradd -u 1001 -g 1001 -m -s /bin/bash headless \
-    && echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN groupadd -g 1001 headless && \
+    useradd -u 1001 -g 1001 -m -s /bin/bash headless && \
+    echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads \
-    && chown -R headless:headless /app /home/headless
+RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads && \
+    chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 拷贝Selenium IDE扩展并解压
+# 复制Selenium IDE扩展并解压
 # ===================================================================
 COPY addons/selenium-ide.crx /opt/selenium-ide.crx
-
-RUN mkdir -p /opt/selenium-ide-unpacked \
-    && unzip /opt/selenium-ide.crx -d /opt/selenium-ide-unpacked
+RUN mkdir -p /opt/selenium-ide-unpacked && unzip /opt/selenium-ide.crx -d /opt/selenium-ide-unpacked
 
 # ===================================================================
-# 生成VNC密码（8位密码要求）
+# 配置VNC密码
 # ===================================================================
-RUN mkdir -p /home/headless/.vnc \
-    && chown headless:headless /home/headless/.vnc \
-    && su - headless -c "echo xPuCyg4h | vncpasswd -f > /home/headless/.vnc/passwd" \
-    && chmod 600 /home/headless/.vnc/passwd \
-    && chown headless:headless /home/headless/.vnc/passwd
+RUN mkdir -p /home/headless/.vnc && \
+    chown headless:headless /home/headless/.vnc && \
+    su - headless -c "echo xPuCyg4h | vncpasswd -f > /home/headless/.vnc/passwd" && \
+    chmod 600 /home/headless/.vnc/passwd && \
+    chown headless:headless /home/headless/.vnc/passwd
 
 # ===================================================================
-# VNC启动脚本
+# VNC xstartup脚本
 # ===================================================================
 RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 #!/bin/sh
@@ -160,24 +158,22 @@ export XDG_SESSION_DESKTOP=xfce
 
 exec /usr/bin/startxfce4
 EOF
-
-RUN chmod +x /home/headless/.vnc/xstartup && \
-    chown headless:headless /home/headless/.vnc/xstartup
+RUN chmod +x /home/headless/.vnc/xstartup && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# noVNC安装及链接
+# noVNC安装
 # ===================================================================
 WORKDIR /tmp
-RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc \
-    && git clone --depth 1 https://github.com/novnc/websockify /usr/share/novnc/utils/websockify \
-    && ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
+RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc && \
+    git clone --depth 1 https://github.com/novnc/websockify /usr/share/novnc/utils/websockify && \
+    ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
 # ===================================================================
-# X11和桌面配置
+# X11和XFCE配置
 # ===================================================================
-RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix \
-    && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix \
-    && echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
+RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && \
+    chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix && \
+    echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml
 
@@ -205,24 +201,23 @@ RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4
 EOF
 
 # ===================================================================
-# 安装Python虚拟环境及依赖
+# 设置Python虚拟环境和安装依赖
 # ===================================================================
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY web-app/requirements.txt /app/web-app/
-RUN pip install --no-cache-dir wheel setuptools \
-    && pip install --no-cache-dir -r /app/web-app/requirements.txt
+RUN pip install --no-cache-dir wheel setuptools && pip install --no-cache-dir -r /app/web-app/requirements.txt
 
 # ===================================================================
-# 复制应用代码及配置
+# 复制应用代码和配置
 # ===================================================================
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # ===================================================================
-# Supervisor配置，Chromium自动加载Selenium IDE扩展
+# Supervisor配置，启动Chromium加载扩展
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -315,10 +310,8 @@ try:
             print(f"✅ 管理员用户已创建: {admin_username}")
         else:
             print(f"✅ 管理员用户已存在: {admin_username}")
-        
         print("数据库初始化完成!")
         sys.exit(0)
-        
 except Exception as e:
     print(f"❌ 数据库初始化失败: {e}")
     import traceback
@@ -392,7 +385,7 @@ EOF
 RUN chmod +x /app/scripts/entrypoint.sh
 
 # ===================================================================
-# 权限与端口暴露
+# 设置权限及端口暴露
 # ===================================================================
 RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chown -R www-data:www-data /var/log/nginx /var/lib/nginx 2>/dev/null || true \
