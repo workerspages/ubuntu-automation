@@ -115,7 +115,7 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
     echo '  }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '}' >> /usr/lib/firefox/distribution/policies.json
 
-# --- 关键修改：配置一个健壮的 VNC 启动脚本 (xstartup) ---
+# 配置一个健壮的 VNC 启动脚本 (xstartup)，这个脚本将被基础镜像自动调用
 RUN \
     mkdir -p /home/headless/.vnc && \
     cat <<EOF > /home/headless/.vnc/xstartup
@@ -171,6 +171,5 @@ RUN chmod +x /app/scripts/*.sh && \
 EXPOSE 5000
 
 # 容器启动命令，使用新的 entrypoint 脚本来启动 Supervisor
-# Supervisor 会管理 Nginx, VNC, noVNC 和 Gunicorn(Flask) 服务
-# 注意：CMD 前不再切换到 USER 1001，因为 Supervisor 需要以 root 启动来管理所有进程
+# Supervisor 会管理 Nginx, noVNC 和 Gunicorn(Flask) 服务
 CMD ["/app/scripts/entrypoint.sh"]
