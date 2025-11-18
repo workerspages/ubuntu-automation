@@ -1,5 +1,5 @@
 # ===================================================================
-# 基础镜像及环境变量
+# 基础镜像和环境变量
 # ===================================================================
 FROM ubuntu:22.04
 
@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装基础依赖和Chromium浏览器（不含firefox）
+# 安装依赖和Chromium浏览器
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -60,19 +60,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 安装Playwright及依赖浏览器驱动
+# 安装 Playwright 及其浏览器
 # ===================================================================
 RUN npm install -g playwright \
     && npx playwright install --with-deps
 
 # ===================================================================
-# 设置时区与中文环境
+# 时区和语言环境设置
 # ===================================================================
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 下载并安装GeckoDriver(虽然没有firefox，但保持兼容)
+# 下载并安装 GeckoDriver
 # ===================================================================
 RUN GECKODRIVER_VERSION="0.34.0" \
     && wget --timeout=30 --tries=3 -O /tmp/geckodriver.tar.gz \
@@ -82,7 +82,7 @@ RUN GECKODRIVER_VERSION="0.34.0" \
     && rm /tmp/geckodriver.tar.gz
 
 # ===================================================================
-# 安装AutoKey工具
+# 安装 AutoKey
 # ===================================================================
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
@@ -100,7 +100,7 @@ RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/c
 RUN rm -rf /tmp/* /var/tmp/*
 
 # ===================================================================
-# 添加 headless 用户和工作目录
+# 创建headless用户和目录
 # ===================================================================
 RUN groupadd -g 1001 headless \
     && useradd -u 1001 -g 1001 -m -s /bin/bash headless \
@@ -118,7 +118,7 @@ RUN mkdir -p /opt/selenium-ide-unpacked \
     && unzip /opt/selenium-ide.crx -d /opt/selenium-ide-unpacked
 
 # ===================================================================
-# VNC密码配置（8位密码）
+# 生成VNC密码（8位密码要求）
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc \
     && chown headless:headless /home/headless/.vnc \
@@ -127,7 +127,7 @@ RUN mkdir -p /home/headless/.vnc \
     && chown headless:headless /home/headless/.vnc/passwd
 
 # ===================================================================
-# VNC xstartup脚本
+# VNC启动脚本
 # ===================================================================
 RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 #!/bin/sh
@@ -161,11 +161,11 @@ export XDG_SESSION_DESKTOP=xfce
 exec /usr/bin/startxfce4
 EOF
 
-RUN chmod +x /home/headless/.vnc/xstartup \
-    && chown headless:headless /home/headless/.vnc/xstartup
+RUN chmod +x /home/headless/.vnc/xstartup && \
+    chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# noVNC安装
+# noVNC安装及链接
 # ===================================================================
 WORKDIR /tmp
 RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc \
@@ -173,7 +173,7 @@ RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc \
     && ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
 # ===================================================================
-# X11和桌面配置同之前保持
+# X11和桌面配置
 # ===================================================================
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix \
     && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix \
@@ -205,32 +205,24 @@ RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4
 EOF
 
 # ===================================================================
-# Python虚拟环境 + 依赖
+# 安装Python虚拟环境及依赖
 # ===================================================================
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY web-app/requirements.txt /app/web-app/
-RUN pip install --no-cache-dir wheel setuptools && pip install --no-cache-dir -r /app/web-app/requirements.txt
+RUN pip install --no-cache-dir wheel setuptools \
+    && pip install --no-cache-dir -r /app/web-app/requirements.txt
 
 # ===================================================================
-# 复制应用及配置
+# 复制应用代码及配置
 # ===================================================================
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # ===================================================================
-# 赋予XPI扩展（根据需要保留）
-# ===================================================================
-RUN if [ -f /app/firefox-xpi/selenium-ide.xpi ]; then \
-    mkdir -p /usr/lib/firefox-esr/distribution /usr/lib/firefox/distribution 2>/dev/null || true; \
-    cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox-esr/distribution/ 2>/dev/null || true; \
-    cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/ 2>/dev/null || true; \
-    fi
-
-# ===================================================================
-# Supervisor配置（不变）
+# Supervisor配置，Chromium自动加载Selenium IDE扩展
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -266,8 +258,17 @@ stderr_logfile=/app/logs/novnc-error.log
 user=headless
 priority=20
 
+[program:chromium]
+command=su - headless -c "/usr/bin/chromium-browser --no-sandbox --disable-gpu --load-extension=/opt/selenium-ide-unpacked --user-data-dir=/home/headless/.config/chromium --start-maximized"
+autostart=true
+autorestart=true
+stdout_logfile=/app/logs/chromium.log
+stderr_logfile=/app/logs/chromium-error.log
+user=headless
+priority=15
+
 [program:nginx]
-command=/usr/sbin/nginx -g "daemon off;"
+command=/usr/sbin/nginx -g \"daemon off;\"
 autostart=true
 autorestart=true
 stdout_logfile=/app/logs/nginx.log
@@ -281,7 +282,7 @@ autostart=true
 autorestart=true
 stdout_logfile=/app/logs/webapp.log
 stderr_logfile=/app/logs/webapp-error.log
-environment=HOME="/home/headless",USER="headless",PATH="/opt/venv/bin:%(ENV_PATH)s"
+environment=HOME=\"/home/headless\",USER=\"headless\",PATH=\"/opt/venv/bin:%(ENV_PATH)s\"
 priority=40
 EOF
 
@@ -391,7 +392,7 @@ EOF
 RUN chmod +x /app/scripts/entrypoint.sh
 
 # ===================================================================
-# 权限及端口暴露
+# 权限与端口暴露
 # ===================================================================
 RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chown -R www-data:www-data /var/log/nginx /var/lib/nginx 2>/dev/null || true \
