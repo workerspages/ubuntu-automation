@@ -4,7 +4,7 @@ FROM accetto/ubuntu-vnc-xfce-firefox-g3:latest
 # 切换到 root 用户以进行系统级安装和配置
 USER root
 
-# 设置环境变量，包括时区、语言、数据库和应用配置
+# 设置环境变量,包括时区、语言、数据库和应用配置
 ENV TZ=Asia/Shanghai \
     LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh \
@@ -39,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-gi gir1.2-gtk-3.0 xvfb xfce4-session xfce4-panel xfce4-terminal xfce4-appfinder xfce4-settings dbus-x11 \
     libgtk-3-0 x11-xserver-utils openbox
 
-# 步骤 2: 安装可选的包，使用 || true 忽略可能发生的错误
+# 步骤 2: 安装可选的包,使用 || true 忽略可能发生的错误
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
 RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
 RUN apt-get install -y --no-install-recommends python3-full || true
@@ -115,31 +115,74 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
     echo '  }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '}' >> /usr/lib/firefox/distribution/policies.json
 
-# 配置一个健壮的 VNC 启动脚本 (xstartup)，这个脚本将被基础镜像自动调用
-RUN \
-    mkdir -p /home/headless/.vnc && \
-    cat <<EOF > /home/headless/.vnc/xstartup
+# ===================================================================
+# 关键修复: 配置 VNC xstartup 脚本启动 XFCE 而不是 openbox
+# ===================================================================
+RUN mkdir -p /home/headless/.vnc && \
+    cat << 'EOF' > /home/headless/.vnc/xstartup
 #!/bin/sh
 #
-# This script is executed by vncserver and is responsible for
-# launching the user's desktop environment.
+# VNC xstartup script for XFCE4 Desktop Environment
+# This script is executed by vncserver when starting the VNC session
+#
 
-# Unset session variables to avoid issues with stale sessions
+# ===================================================================
+# 1. 清理会话环境变量
+# ===================================================================
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
-# Load X resources (fonts, colors, etc.)
-[ -r /etc/X11/Xresources ] && xrdb /etc/X11/Xresources
+# ===================================================================
+# 2. 启动 D-Bus 会话总线
+# ===================================================================
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+    eval $(dbus-launch --sh-syntax)
+    export DBUS_SESSION_BUS_ADDRESS
+fi
 
-# Start the full XFCE4 Desktop Environment
-# This is the key command that loads the panel, window manager, and desktop.
-/usr/bin/startxfce4
+# ===================================================================
+# 3. 加载 X 资源配置
+# ===================================================================
+if [ -r /etc/X11/Xresources ]; then
+    xrdb /etc/X11/Xresources
+fi
+
+if [ -r "$HOME/.Xresources" ]; then
+    xrdb -merge "$HOME/.Xresources"
+fi
+
+# ===================================================================
+# 4. 设置 X 服务器选项
+# ===================================================================
+xsetroot -solid grey &
+xset s off &
+xset -dpms &
+xset s noblank &
+
+# ===================================================================
+# 5. 设置输入法环境变量(中文支持)
+# ===================================================================
+export GTK_IM_MODULE=xim
+export QT_IM_MODULE=xim
+export XMODIFIERS=@im=none
+
+# ===================================================================
+# 6. 设置语言和本地化环境
+# ===================================================================
+export LANG=zh_CN.UTF-8
+export LANGUAGE=zh_CN:zh
+export LC_ALL=zh_CN.UTF-8
+
+# ===================================================================
+# 7. 启动 XFCE4 桌面环境
+# ===================================================================
+exec /usr/bin/startxfce4
 EOF
 
-# 确保脚本是可执行的
+# 确保 xstartup 脚本是可执行的
 RUN chmod +x /home/headless/.vnc/xstartup
 
-# 配置 XFCE 电源管理器，禁用屏幕关闭
+# 配置 XFCE 电源管理器,禁用屏幕关闭
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '<?xml version="1.0" encoding="UTF-8"?>' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
     echo '<channel name="xfce4-power-manager" version="1.0">' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
@@ -152,7 +195,7 @@ RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '  </property>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
     echo '</channel>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
 
-# 配置 XFCE 屏幕保护，禁用
+# 配置 XFCE 屏幕保护,禁用
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '<?xml version="1.0" encoding="UTF-8"?>' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml && \
     echo '<channel name="xfce4-screensaver" version="1.0">' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml && \
@@ -170,6 +213,6 @@ RUN chmod +x /app/scripts/*.sh && \
 # 仅暴露 Nginx 的 5000 端口
 EXPOSE 5000
 
-# 容器启动命令，使用新的 entrypoint 脚本来启动 Supervisor
+# 容器启动命令,使用 entrypoint 脚本来启动 Supervisor
 # Supervisor 会管理 Nginx, noVNC 和 Gunicorn(Flask) 服务
 CMD ["/app/scripts/entrypoint.sh"]
