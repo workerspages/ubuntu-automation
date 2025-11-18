@@ -19,6 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 USER root
 
+# 更新环境变量，指向新的浏览器路径
 ENV TZ=Asia/Shanghai \
     LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh \
@@ -34,7 +35,7 @@ ENV TZ=Asia/Shanghai \
     MAX_RETRIES=3 \
     LOG_LEVEL=INFO \
     LOG_FILE=/app/data/automation.log \
-    FIREFOX_BINARY=/usr/bin/chromium-browser \
+    FIREFOX_BINARY=/usr/bin/google-chrome-stable \
     GECKODRIVER_PATH=/usr/bin/geckodriver \
     FLASK_ENV=production \
     FLASK_DEBUG=false \
@@ -54,7 +55,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装系统依赖及Chromium浏览器
+# 安装系统依赖 (移除 chromium-browser)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -66,10 +67,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4 xfce4-goodies xfce4-terminal dbus-x11 libgtk-3-0 libgtk2.0-0 \
     python3 python3-pip python3-venv python3-dev python3-gi python3-xdg python3-websockify \
     gir1.2-gtk-3.0 build-essential pkg-config gcc g++ make libffi-dev libssl-dev \
-    libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev chromium-browser \
+    libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev \
     gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 \
     xautomation kdialog imagemagick nginx nodejs npm unzip libnss3 libatk-bridge2.0-0 libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ===================================================================
+# 直接安装 Google Chrome (最终修复)
+# ===================================================================
+RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
+    apt-get install -y /tmp/chrome.deb && \
+    rm /tmp/chrome.deb
 
 # ===================================================================
 # 安装Playwright及浏览器依赖 (从构建器复制)
@@ -231,7 +239,7 @@ COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # ===================================================================
-# Supervisor配置，启动Chromium加载扩展
+# Supervisor配置 (更新为 google-chrome-stable)
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -268,7 +276,7 @@ user=headless
 priority=20
 
 [program:chromium]
-command=su - headless -c "/usr/bin/chromium-browser --no-sandbox --disable-gpu --load-extension=/opt/selenium-ide-unpacked --user-data-dir=/home/headless/.config/chromium --start-maximized"
+command=su - headless -c "/usr/bin/google-chrome-stable --no-sandbox --disable-gpu --load-extension=/opt/selenium-ide-unpacked --user-data-dir=/home/headless/.config/chromium --start-maximized"
 autostart=true
 autorestart=true
 stdout_logfile=/app/logs/chromium.log
@@ -336,7 +344,7 @@ EOF
 RUN chmod +x /usr/local/bin/init-database
 
 # ===================================================================
-# Entrypoint脚本
+# Entrypoint脚本 (更新为 google-chrome-stable)
 # ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
@@ -346,11 +354,11 @@ echo "==================================="
 echo "Ubuntu 自动化平台启动中..."
 echo "==================================="
 
-if command -v chromium-browser &> /dev/null; then
-    echo "✅ Chromium 已安装"
-    chromium-browser --version
+if command -v google-chrome-stable &> /dev/null; then
+    echo "✅ Google Chrome 已安装"
+    google-chrome-stable --version
 else
-    echo "❌ Chromium 未找到"
+    echo "❌ Google Chrome 未找到"
 fi
 
 echo "VNC密码文件:"
