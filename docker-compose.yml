@@ -2,23 +2,35 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    image: yesyunxin/ubuntu-automation:aio
-    image: ghcr.io/workerspages/ubuntu-automation:aio
+    # 修改镜像名称(根据您的构建设置)
+    image: ghcr.io/workerspages/ubuntu-automation:latest
+    # 或使用本地构建
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     container_name: ubuntu-automation
     ports:
-      - "5000:5000" # 只映射 5000 端口
+      - "5000:5000"
     environment:
       - VNC_PW=admin
-      - SECRET_KEY=admin
+      - SECRET_KEY=your-secret-key-change-this
       - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=admin
-      - TELEGRAM_BOT_TOKEN=12345678:abcdabcdabcdabcdabcdabcd
-      - TELEGRAM_CHAT_ID=-12345678
-      - ENABLE_CLOUDFLARE_TUNNEL=false # 本地测试建议先关闭
-      - CLOUDFLARE_TUNNEL_TOKEN=<token>
+      - ADMIN_PASSWORD=admin123
+      - TELEGRAM_BOT_TOKEN=
+      - TELEGRAM_CHAT_ID=
+      - ENABLE_CLOUDFLARE_TUNNEL=false
+      - CLOUDFLARE_TUNNEL_TOKEN=
       - DISPLAY=:1
     volumes:
       - ./Downloads:/home/headless/Downloads
-      # - ./data:/app/data # 如果需要持久化数据，请取消注释
+      - ./data:/app/data  # 持久化数据库
+      - ./logs:/app/logs  # 持久化日志
     restart: unless-stopped
     shm_size: '2gb'
+    # 添加健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
