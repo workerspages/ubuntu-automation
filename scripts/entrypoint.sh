@@ -7,6 +7,11 @@ USERNAME="headless"
 USERID=1001
 GROUPID=1001
 
+# --- 新增的关键修复 ---
+# 在启动任何服务之前，清理上一次运行可能残留的 X11 锁文件
+echo "正在清理旧的 X11 锁文件..."
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
+
 # 确保目录存在且权限正确
 mkdir -p /app/data /app/logs /home/$USERNAME/.vnc
 chown -R $USERID:$GROUPID /app /home/$USERNAME
