@@ -5,6 +5,9 @@ FROM accetto/ubuntu-vnc-xfce-firefox-g3:latest
 USER root
 
 # 设置环境变量,包括时区、语言、数据库和应用配置
+# ===================================================================
+# 关键修复1: 添加 XDG 环境变量强制使用 XFCE 而不是 openbox
+# ===================================================================
 ENV TZ=Asia/Shanghai \
     LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh \
@@ -27,17 +30,24 @@ ENV TZ=Asia/Shanghai \
     FLASK_DEBUG=false \
     HOST=0.0.0.0 \
     PORT=5000 \
-    DISPLAY=:1
+    DISPLAY=:1 \
+    XDG_CONFIG_DIRS=/etc/xdg/xfce4:/etc/xdg \
+    XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share \
+    XDG_CURRENT_DESKTOP=XFCE \
+    XDG_SESSION_DESKTOP=xfce
 
 # --- 软件包安装 ---
 # 分步安装以提高可读性和错误隔离
 # 步骤 1: 更新软件源并安装核心依赖 (Nginx, Supervisor, Python, 图形界面基础)
+# ===================================================================
+# 关键修复2: 添加 python3-xdg 解决 openbox-xdg-autostart 错误
+# ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx supervisor \
     locales fonts-wqy-microhei fonts-wqy-zenhei curl wget ca-certificates sudo git cron sqlite3 \
     python3 python3-pip python3-venv python3-dev build-essential pkg-config gcc g++ make libffi-dev libssl-dev libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev \
     python3-gi gir1.2-gtk-3.0 xvfb xfce4-session xfce4-panel xfce4-terminal xfce4-appfinder xfce4-settings dbus-x11 \
-    libgtk-3-0 x11-xserver-utils openbox
+    libgtk-3-0 x11-xserver-utils openbox python3-xdg
 
 # 步骤 2: 安装可选的包,使用 || true 忽略可能发生的错误
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
@@ -116,7 +126,7 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
     echo '}' >> /usr/lib/firefox/distribution/policies.json
 
 # ===================================================================
-# 关键修复: 配置 VNC xstartup 脚本启动 XFCE 而不是 openbox
+# 关键修复3: 覆盖基础镜像的 VNC xstartup 脚本,启动 XFCE 而不是 openbox
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc && \
     cat << 'EOF' > /home/headless/.vnc/xstartup
@@ -174,13 +184,38 @@ export LANGUAGE=zh_CN:zh
 export LC_ALL=zh_CN.UTF-8
 
 # ===================================================================
-# 7. 启动 XFCE4 桌面环境
+# 7. 强制设置 XDG 环境变量指向 XFCE
+# ===================================================================
+export XDG_CONFIG_DIRS=/etc/xdg/xfce4:/etc/xdg
+export XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share
+export XDG_CURRENT_DESKTOP=XFCE
+export XDG_SESSION_DESKTOP=xfce
+
+# ===================================================================
+# 8. 启动 XFCE4 桌面环境
 # ===================================================================
 exec /usr/bin/startxfce4
 EOF
 
 # 确保 xstartup 脚本是可执行的
 RUN chmod +x /home/headless/.vnc/xstartup
+
+# ===================================================================
+# 关键修复4: 查找并替换基础镜像中的 openbox 引用为 xfce
+# ===================================================================
+RUN find /usr/local/bin /usr/bin /dockerstartup /home/headless -type f -name "*.sh" -exec grep -l "openbox" {} \; 2>/dev/null | while read file; do \
+    sed -i 's/openbox-session/startxfce4/g' "$file" 2>/dev/null || true; \
+    sed -i 's/\/usr\/bin\/openbox/\/usr\/bin\/startxfce4/g' "$file" 2>/dev/null || true; \
+    done || true
+
+# ===================================================================
+# 关键修复5: 创建全局环境变量配置文件
+# ===================================================================
+RUN echo 'export XDG_CONFIG_DIRS=/etc/xdg/xfce4:/etc/xdg' >> /etc/profile.d/xfce-env.sh && \
+    echo 'export XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share' >> /etc/profile.d/xfce-env.sh && \
+    echo 'export XDG_CURRENT_DESKTOP=XFCE' >> /etc/profile.d/xfce-env.sh && \
+    echo 'export XDG_SESSION_DESKTOP=xfce' >> /etc/profile.d/xfce-env.sh && \
+    chmod +x /etc/profile.d/xfce-env.sh
 
 # 配置 XFCE 电源管理器,禁用屏幕关闭
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
