@@ -6,3 +6,4 @@ requests>=2.31.0
 selenium>=4.15.2
 python-telegram-bot>=20.7
 cryptography>=41.0.7
+gunicorn>=22.0.0
