@@ -63,11 +63,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 安装 Google Chrome
+# 安装 Google Chrome (修复依赖问题)
 # ===================================================================
+# 必须在这里再次 apt-get update，因为上一步已经清理了缓存
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
+    apt-get update && \
     apt-get install -y /tmp/chrome.deb && \
-    rm /tmp/chrome.deb
+    rm /tmp/chrome.deb && \
+    rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
 # 设置时区和语言
@@ -205,7 +208,6 @@ RUN pip install --no-cache-dir wheel setuptools && pip install --no-cache-dir -r
 # 复制应用代码和配置
 # ===================================================================
 COPY web-app/ /app/web-app/
-# 这一步会将你本地保存的 scripts/entrypoint.sh 复制进去
 COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
