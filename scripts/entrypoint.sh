@@ -59,18 +59,21 @@ PYEOF
 }
 
 # ===================================================================
-# 5. [新增] 配置 Cloudflare Tunnel
+# 5. 配置 Cloudflare Tunnel (核心修复部分)
 # ===================================================================
-if [ "${ENABLE_CLOUDFLARE_TUNNEL}" == "true" ]; then
-    echo "🌐 检测到 Cloudflare Tunnel 已启用..."
+# 将环境变量转为小写，兼容 True/true/TRUE
+CF_ENABLE=$(echo "${ENABLE_CLOUDFLARE_TUNNEL}" | tr '[:upper:]' '[:lower:]')
+
+if [ "$CF_ENABLE" == "true" ]; then
+    echo "🌐 [Cloudflare] 检测到启用开关..."
     
     if [ -z "${CLOUDFLARE_TUNNEL_TOKEN}" ]; then
-        echo "❌ 错误: ENABLE_CLOUDFLARE_TUNNEL=true 但未提供 CLOUDFLARE_TUNNEL_TOKEN"
+        echo "❌ [Cloudflare] 错误: 启用了开关但未提供 Token！"
     else
-        echo "✅ 正在添加 Cloudflare Tunnel 到 Supervisor 配置..."
+        echo "✅ [Cloudflare] 正在写入 Supervisor 配置..."
         
         # 动态追加配置到 supervisord 配置文件
-        # 注意：这里直接将 Token 写入命令，或者你可以让 supervisor 传递环境变量
+        # 使用 cat << EOF 确保变量被正确解析并写入文件
         cat << EOF >> /etc/supervisor/conf.d/services.conf
 
 [program:cloudflared]
@@ -79,12 +82,13 @@ autostart=true
 autorestart=true
 stdout_logfile=/app/logs/cloudflared.log
 stderr_logfile=/app/logs/cloudflared-error.log
-user=headless
+user=root
 priority=50
 EOF
+        echo "✅ [Cloudflare] 配置写入完成。"
     fi
 else
-    echo "⚪ Cloudflare Tunnel 未启用"
+    echo "⚪ [Cloudflare] 未启用 (ENABLE=${CF_ENABLE})"
 fi
 
 echo "修正数据库权限..."
@@ -93,5 +97,8 @@ chown -R headless:headless /app/data
 echo "==================================="
 echo "启动服务..."
 echo "==================================="
+
+# 打印配置文件末尾以供调试验证，确认 Cloudflare 块已写入
+tail -n 15 /etc/supervisor/conf.d/services.conf
 
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/services.conf
