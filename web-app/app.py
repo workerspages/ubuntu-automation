@@ -229,7 +229,7 @@ def execute_script(task_id):
                 # Actiona Script
                 success = execute_actiona_script(task.name, task.script_path)
             elif script_path.endswith('.autokey'):
-                # Legacy AutoKey (Assuming script name mapping)
+                # Legacy AutoKey
                 success = execute_autokey_script(Path(task.script_path).stem, task.name)
             else:
                 logger.error(f"不支持的脚本类型: {script_path}")
@@ -262,8 +262,9 @@ def execute_selenium_script(task_name, script_path):
 def execute_python_script(task_name, script_path):
     """执行 .py 文件 (Playwright)"""
     try:
+        # 确保传递 DISPLAY 变量，使窗口出现在 VNC
         env = os.environ.copy()
-        env['DISPLAY'] = ':1' # 确保在 VNC 显示
+        env['DISPLAY'] = ':1' 
         
         result = subprocess.run(
             ['python3', script_path],
@@ -298,8 +299,8 @@ def execute_actiona_script(task_name, script_path):
         env = os.environ.copy()
         env['DISPLAY'] = ':1'
         
-        # actiona -s script.ascr -e (execute) -C (close when finished if possible, though Actiona GUI might persist)
-        # Actiona 通常需要 GUI，所以我们在 subprocess 中调用
+        # -e: 执行脚本
+        # -C: 执行完成后关闭 (虽然 GUI 版可能会残留，但有助于清理)
         result = subprocess.run(
             ['actiona', '-s', script_path, '-e'],
             capture_output=True,
@@ -307,7 +308,7 @@ def execute_actiona_script(task_name, script_path):
             timeout=300,
             env=env
         )
-        # Actiona CLI 返回值并不总是可靠，但我们可以检查 stderr
+        # Actiona CLI 返回码不一定标准，主要依赖 stderr 为空来判断
         success = result.returncode == 0
         log_msg = f"Actiona Output:\n{result.stdout}\nError:\n{result.stderr}"
         
@@ -316,7 +317,6 @@ def execute_actiona_script(task_name, script_path):
         else:
             logger.error(f"Actiona脚本执行失败: {result.stderr}")
 
-        # 发送通知
         bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
         chat_id = os.environ.get('TELEGRAM_CHAT_ID')
         if bot_token and chat_id:
@@ -331,11 +331,16 @@ def execute_actiona_script(task_name, script_path):
 def execute_autokey_script(script_stem, task_name):
     """执行 AutoKey 脚本"""
     try:
+        # AutoKey 需要 DBus 通信，确保 DISPLAY 正确
+        env = os.environ.copy()
+        env['DISPLAY'] = ':1'
+        
         result = subprocess.run(
             ['autokey-run', '-s', script_stem],
             capture_output=True,
             text=True,
-            timeout=300
+            timeout=300,
+            env=env
         )
         success = result.returncode == 0
         if success:
