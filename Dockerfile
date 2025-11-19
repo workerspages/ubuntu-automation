@@ -39,10 +39,12 @@ ENV TZ=Asia/Shanghai \
     XDG_CONFIG_DIRS=/etc/xdg/xfce4:/etc/xdg \
     XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share \
     XDG_CURRENT_DESKTOP=XFCE \
-    XDG_SESSION_DESKTOP=xfce
+    XDG_SESSION_DESKTOP=xfce \
+    # Playwright 浏览器公共安装路径
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 
 # ===================================================================
-# 安装系统依赖 (包含 actiona, p7zip-full)
+# 安装系统依赖 (保留 actiona)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -60,7 +62,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
-    actiona p7zip-full \
+    actiona \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
@@ -73,27 +75,11 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 安装 Selenium IDE 扩展 (本地文件 + 7z 解压)
-# ===================================================================
-COPY addons/selenium-ide.crx /tmp/selenium-ide.crx
-RUN mkdir -p /opt/selenium-ide-unpacked && \
-    7z x /tmp/selenium-ide.crx -o/opt/selenium-ide-unpacked -y && \
-    if [ ! -f "/opt/selenium-ide-unpacked/manifest.json" ]; then \
-        SUBDIR=$(find /opt/selenium-ide-unpacked -name "manifest.json" -printf "%h\n" | head -1); \
-        if [ -n "$SUBDIR" ]; then \
-            mv "$SUBDIR"/* /opt/selenium-ide-unpacked/; \
-        fi; \
-    fi && \
-    ls -l /opt/selenium-ide-unpacked/manifest.json && \
-    chown -R headless:headless /opt/selenium-ide-unpacked && \
-    rm /tmp/selenium-ide.crx
-
-# ===================================================================
-# 配置 Chrome 启动包装器
+# 配置 Chrome 启动包装器 (仅保留 No-Sandbox，移除插件加载)
 # ===================================================================
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
-    echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu --load-extension=/opt/selenium-ide-unpacked "$@"' >> /usr/bin/google-chrome-stable && \
+    echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu "$@"' >> /usr/bin/google-chrome-stable && \
     chmod +x /usr/bin/google-chrome-stable
 
 # ===================================================================
@@ -217,10 +203,13 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY web-app/requirements.txt /app/web-app/
+# 1. 创建公共目录
 RUN mkdir -p /opt/playwright && \
     pip install --no-cache-dir wheel setuptools && \
     pip install --no-cache-dir -r /app/web-app/requirements.txt && \
+    # 2. 安装浏览器到公共目录
     playwright install chromium && \
+    # 3. 关键：赋予 headless 用户权限
     chmod -R 777 /opt/playwright
 
 # ===================================================================
@@ -231,7 +220,7 @@ COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # ===================================================================
-# Supervisor配置 (关键修改: 增加 autokey-gtk 自启动)
+# Supervisor配置
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -338,7 +327,7 @@ EOF
 RUN chmod +x /usr/local/bin/init-database
 
 # ===================================================================
-# Entrypoint脚本
+# Entrypoint脚本 (确保修复数据库权限)
 # ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
@@ -399,6 +388,7 @@ PYEOF
 }
 
 echo "修正数据库权限..."
+# 确保 headless 用户能写入数据库
 chown -R headless:headless /app/data
 
 echo "==================================="
