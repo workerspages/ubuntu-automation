@@ -222,6 +222,7 @@ RUN mkdir -p /opt/playwright && \
 # 复制应用代码和配置
 # ===================================================================
 COPY web-app/ /app/web-app/
+# Force rebuild mark 2024
 COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
