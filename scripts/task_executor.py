@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-Selenium IDE任务执行器 (Chrome Edition)
-用于执行.side格式的Selenium脚本文件
-支持可视化执行和反机器人检测
+Selenium IDE 任务执行器 & 通用通知模块
 """
 
 import sys
@@ -11,6 +9,7 @@ import time
 import random
 import logging
 import os
+import requests
 from pathlib import Path
 from datetime import datetime
 
@@ -26,8 +25,6 @@ from selenium.webdriver.common.action_chains import ActionChains
 
 # Driver Manager
 from webdriver_manager.chrome import ChromeDriverManager
-
-import requests
 
 # 配置日志
 logging.basicConfig(
@@ -50,8 +47,50 @@ HUMAN_LIKE_DELAYS = {
     'click_delay': 0.3
 }
 
+def send_telegram_notification(script_name, success, message, bot_token, chat_id):
+    """
+    通用 Telegram 通知发送函数
+    适用于: Selenium, Playwright, Actiona, AutoKey
+    """
+    if not bot_token or not chat_id:
+        return
+    
+    status_emoji = '✅' if success else '❌'
+    status_text = '执行成功' if success else '执行失败'
+    
+    # 截断过长消息
+    if message and len(message) > 2000:
+        message = message[-2000:] + "\n...(日志过长已截断)"
+    
+    html_message = f"""
+<b>{status_emoji} 自动化任务通知</b>
+
+<b>任务名称:</b> {script_name}
+<b>执行状态:</b> {status_text}
+<b>执行时间:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+<b>详细信息:</b>
+<pre>{message}</pre>
+"""
+    
+    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
+    data = {
+        'chat_id': chat_id,
+        'text': html_message,
+        'parse_mode': 'HTML'
+    }
+    
+    try:
+        response = requests.post(url, data=data, timeout=10)
+        if response.status_code == 200:
+            logger.info(f"Telegram通知已发送: {script_name}")
+        else:
+            logger.warning(f"Telegram通知发送失败: {response.text}")
+    except Exception as e:
+        logger.error(f"发送Telegram通知异常: {e}")
+
+
 class SeleniumIDEExecutor:
-    """Selenium IDE脚本执行器 - Chrome 可视化模式"""
+    """Selenium IDE脚本执行器 - Chrome Edition"""
     
     def __init__(self, script_path):
         self.script_path = script_path
@@ -72,13 +111,15 @@ class SeleniumIDEExecutor:
             options.add_argument('--disable-dev-shm-usage')
             options.add_argument('--start-maximized')
             options.add_argument('--disable-gpu')
+            # 禁用沙盒提示条
+            options.add_argument('--disable-infobars')
             
             # 反检测配置 (Anti-bot)
             options.add_argument('--disable-blink-features=AutomationControlled')
             options.add_experimental_option('excludeSwitches', ['enable-automation'])
             options.add_experimental_option('useAutomationExtension', False)
             
-            # 设置 User-Agent (模拟正常浏览器)
+            # 设置 User-Agent
             options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
             
             # 使用 webdriver_manager 自动获取匹配的 chromedriver
@@ -87,7 +128,7 @@ class SeleniumIDEExecutor:
             self.driver = webdriver.Chrome(service=service, options=options)
             self.driver.implicitly_wait(10)
             
-            # 执行 CDP 命令进行隐身 (关键反检测步骤)
+            # 执行 CDP 命令进行隐身
             self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
                 'source': '''
                     Object.defineProperty(navigator, 'webdriver', {
@@ -125,7 +166,6 @@ class SeleniumIDEExecutor:
             with open(self.script_path, 'r', encoding='utf-8') as f:
                 script_data = json.load(f)
             
-            # 读取 base URL
             if 'url' in script_data:
                 self.base_url = script_data['url']
                 logger.info(f"读取到 base URL: {self.base_url}")
@@ -146,74 +186,52 @@ class SeleniumIDEExecutor:
         time.sleep(delay)
     
     def execute_command(self, command):
-        """执行单个命令 - 带人类化操作"""
+        """执行单个命令"""
         cmd = command.get('command', '')
         target = command.get('target', '')
         value = command.get('value', '')
         
         try:
-            # 命令执行前的随机延迟
             self.human_delay()
-            
-            # 替换变量
             target = self.replace_variables(target)
             value = self.replace_variables(value)
             
             logger.info(f"执行命令: {cmd} | {target} | {value}")
             
             if cmd == 'open':
-                # 智能处理 URL
-                if target.startswith('http://') or target.startswith('https://'):
+                if target.startswith('http'):
                     url = target
                 elif target.startswith('/'):
-                    if self.base_url:
-                        url = self.base_url.rstrip('/') + target
-                    else:
-                        url = 'https://www.baidu.com' + target
-                        logger.warning(f"未设置 base_url，使用默认: {url}")
-                elif target:
-                    url = f"https://{target}"
+                    url = (self.base_url.rstrip('/') if self.base_url else 'https://www.baidu.com') + target
                 else:
                     url = self.base_url if self.base_url else 'https://www.baidu.com'
-                
-                logger.info(f"访问 URL: {url}")
                 self.driver.get(url)
             
             elif cmd == 'click':
                 element = self.find_element(target)
-                # 滚动到元素可见
                 self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
                 time.sleep(HUMAN_LIKE_DELAYS['scroll_delay'])
-                # 移动到元素上点击
                 ActionChains(self.driver).move_to_element(element).pause(HUMAN_LIKE_DELAYS['click_delay']).click().perform()
             
             elif cmd == 'type':
                 element = self.find_element(target)
                 element.clear()
                 time.sleep(0.2)
-                # 逐字输入，模拟人类打字
                 for char in value:
                     element.send_keys(char)
-                    time.sleep(random.uniform(
-                        HUMAN_LIKE_DELAYS['min_typing_delay'],
-                        HUMAN_LIKE_DELAYS['max_typing_delay']
-                    ))
+                    time.sleep(random.uniform(HUMAN_LIKE_DELAYS['min_typing_delay'], HUMAN_LIKE_DELAYS['max_typing_delay']))
             
             elif cmd == 'sendKeys':
                 element = self.find_element(target)
-                # 特殊键处理
                 if value == '${KEY_ENTER}':
                     element.send_keys(Keys.ENTER)
                 else:
-                    for char in value:
-                        element.send_keys(char)
-                        time.sleep(random.uniform(0.05, 0.15))
+                    element.send_keys(value)
             
             elif cmd == 'select':
                 from selenium.webdriver.support.select import Select
                 element = self.find_element(target)
                 select = Select(element)
-                # 简单的 select strategy 处理
                 if value.startswith('label='):
                     select.select_by_visible_text(value.replace('label=', ''))
                 elif value.startswith('value='):
@@ -222,14 +240,10 @@ class SeleniumIDEExecutor:
                     select.select_by_visible_text(value)
             
             elif cmd == 'waitForElementVisible':
-                WebDriverWait(self.driver, 30).until(
-                    EC.visibility_of_element_located(self.parse_locator(target))
-                )
+                WebDriverWait(self.driver, 30).until(EC.visibility_of_element_located(self.parse_locator(target)))
             
             elif cmd == 'waitForElementPresent':
-                WebDriverWait(self.driver, 30).until(
-                    EC.presence_of_element_located(self.parse_locator(target))
-                )
+                WebDriverWait(self.driver, 30).until(EC.presence_of_element_located(self.parse_locator(target)))
             
             elif cmd == 'pause':
                 time.sleep(int(value) / 1000)
@@ -247,46 +261,21 @@ class SeleniumIDEExecutor:
             
             elif cmd == 'assertText':
                 element = self.find_element(target)
-                assert element.text == value, f"文本不匹配: 期望 '{value}', 实际 '{element.text}'"
+                assert element.text == value
             
             elif cmd == 'assertTitle':
-                assert self.driver.title == target, f"标题不匹配: 期望 '{target}', 实际 '{self.driver.title}'"
-            
-            elif cmd == 'mouseOver':
-                element = self.find_element(target)
-                ActionChains(self.driver).move_to_element(element).perform()
-            
-            elif cmd == 'doubleClick':
-                element = self.find_element(target)
-                ActionChains(self.driver).double_click(element).perform()
+                assert self.driver.title == target
             
             elif cmd == 'executeScript':
                 self.driver.execute_script(target)
             
-            elif cmd == 'refresh':
-                self.driver.refresh()
-            
-            elif cmd == 'close':
-                self.driver.close()
-            
-            elif cmd == 'runScript':
-                self.driver.execute_script(target)
-            
             elif cmd == 'setWindowSize':
-                if not value or 'x' not in value:
-                    logger.warning(f"setWindowSize 参数格式错误: {value}")
-                    return False
-                sizes = value.split('x')
-                try:
-                    width = int(sizes[0])
-                    height = int(sizes[1])
-                    self.driver.set_window_size(width, height)
-                except ValueError:
-                    logger.error(f"setWindowSize 数值转换失败: {value}")
-                    return False
+                if 'x' in value:
+                    sizes = value.split('x')
+                    self.driver.set_window_size(int(sizes[0]), int(sizes[1]))
             
             else:
-                logger.warning(f"未知或暂不支持的命令: {cmd}")
+                logger.warning(f"未知命令: {cmd}")
             
             return True
             
@@ -295,129 +284,68 @@ class SeleniumIDEExecutor:
             return False
     
     def find_element(self, target):
-        """查找元素"""
         by, value = self.parse_locator(target)
         return self.driver.find_element(by, value)
     
     def parse_locator(self, target):
-        """解析定位器"""
-        if target.startswith('id='):
-            return (By.ID, target[3:])
-        elif target.startswith('name='):
-            return (By.NAME, target[5:])
-        elif target.startswith('css='):
-            return (By.CSS_SELECTOR, target[4:])
-        elif target.startswith('xpath='):
-            return (By.XPATH, target[6:])
-        elif target.startswith('linkText='):
-            return (By.LINK_TEXT, target[9:])
-        elif target.startswith('//'):
-            return (By.XPATH, target)
-        else:
-            return (By.CSS_SELECTOR, target)
+        if target.startswith('id='): return (By.ID, target[3:])
+        elif target.startswith('name='): return (By.NAME, target[5:])
+        elif target.startswith('css='): return (By.CSS_SELECTOR, target[4:])
+        elif target.startswith('xpath='): return (By.XPATH, target[6:])
+        elif target.startswith('linkText='): return (By.LINK_TEXT, target[9:])
+        elif target.startswith('//'): return (By.XPATH, target)
+        else: return (By.CSS_SELECTOR, target)
     
     def replace_variables(self, text):
-        """替换变量"""
-        if not text:
-            return text
+        if not text: return text
         for var_name, var_value in self.variables.items():
             text = text.replace(f'${{{var_name}}}', str(var_value))
         return text
     
     def execute(self):
-        """执行完整脚本"""
         start_time = datetime.now()
-        
         try:
-            # 加载脚本
             script_data = self.load_script()
-            if not script_data:
-                return False, "脚本加载失败"
+            if not script_data: return False, "脚本加载失败"
             
-            # 初始化浏览器
-            if not self.setup_driver():
-                return False, "浏览器初始化失败"
+            if not self.setup_driver(): return False, "浏览器初始化失败"
             
-            # 执行测试
             tests = script_data.get('tests', [])
             for test in tests:
                 logger.info(f"执行测试: {test.get('name', 'Unnamed')}")
                 commands = test.get('commands', [])
-                
                 for i, command in enumerate(commands):
                     if not self.execute_command(command):
                         error_msg = f"命令执行失败 (第{i+1}条): {command.get('command')}"
                         return False, error_msg
             
-            # 任务完成后保持浏览器打开一段时间（便于观察）
-            logger.info("任务执行完成，浏览器将在10秒后关闭")
-            time.sleep(10)
-            
+            time.sleep(5)
             duration = (datetime.now() - start_time).total_seconds()
-            logger.info(f"脚本执行成功，耗时: {duration:.2f}秒")
             return True, f"执行成功，耗时{duration:.2f}秒"
             
         except Exception as e:
             logger.error(f"脚本执行异常: {e}")
             return False, str(e)
-        
         finally:
             if self.driver:
-                try:
-                    self.driver.quit()
-                except:
-                    pass
-
-def send_telegram_notification(script_name, success, message, bot_token, chat_id):
-    """发送Telegram通知"""
-    if not bot_token or not chat_id:
-        return
-    
-    status_emoji = '✅' if success else '❌'
-    status_text = '成功' if success else '失败'
-    
-    html_message = f"""
-<b>{status_emoji} Selenium任务执行通知</b>
-
-<b>脚本名称:</b> {script_name}
-<b>执行状态:</b> {status_text}
-<b>执行时间:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-<b>详细信息:</b> {message}
-"""
-    
-    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
-    data = {
-        'chat_id': chat_id,
-        'text': html_message,
-        'parse_mode': 'HTML'
-    }
-    
-    try:
-        response = requests.post(url, data=data, timeout=10)
-        if response.status_code == 200:
-            logger.info("Telegram通知发送成功")
-        else:
-            logger.warning(f"Telegram通知发送失败: {response.status_code}")
-    except Exception as e:
-        logger.error(f"发送Telegram通知异常: {e}")
+                try: self.driver.quit()
+                except: pass
 
 if __name__ == '__main__':
+    # 命令行测试入口
     if len(sys.argv) < 2:
-        print("用法: python3 task_executor.py <script_path> [bot_token] [chat_id]")
+        print("Usage: python3 task_executor.py <script_path> [bot_token] [chat_id]")
         sys.exit(1)
     
     script_path = sys.argv[1]
     bot_token = sys.argv[2] if len(sys.argv) > 2 else None
     chat_id = sys.argv[3] if len(sys.argv) > 3 else None
     
-    # 执行脚本
     executor = SeleniumIDEExecutor(script_path)
     success, message = executor.execute()
     
-    # 发送通知
     if bot_token and chat_id:
         script_name = Path(script_path).name
         send_telegram_notification(script_name, success, message, bot_token, chat_id)
     
-    # 返回执行结果
     sys.exit(0 if success else 1)
