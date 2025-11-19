@@ -211,7 +211,12 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY web-app/requirements.txt /app/web-app/
-RUN pip install --no-cache-dir wheel setuptools && pip install --no-cache-dir -r /app/web-app/requirements.txt
+# 1. 安装 Python 库
+RUN pip install --no-cache-dir wheel setuptools && \
+    pip install --no-cache-dir -r /app/web-app/requirements.txt
+
+# 2. 安装 Playwright 浏览器 (Chromium)
+RUN playwright install chromium
 
 # ===================================================================
 # 复制应用代码和配置
