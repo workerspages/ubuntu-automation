@@ -102,11 +102,13 @@ def list_scripts():
     return jsonify(scripts)
 
 def get_available_scripts():
+    """扫描 Downloads 目录获取支持的脚本"""
     scripts_dir = Path(os.environ.get('SCRIPTS_DIR', '/home/headless/Downloads'))
     scripts = []
+    supported_extensions = ['.side', '.py', '.ascr', '.autokey']
     if scripts_dir.exists():
         for file in scripts_dir.iterdir():
-            if file.suffix.lower() in ['.side', '.py', '.autokey']:
+            if file.suffix.lower() in supported_extensions:
                 scripts.append({'name': file.name, 'path': str(file)})
     return scripts
 
@@ -202,52 +204,150 @@ def schedule_task(task):
             logger.error(f'调度任务失败: {e}')
 
 def execute_script(task_id):
+    """核心执行入口：根据后缀分发到不同的执行器"""
     with app.app_context():
         task = db.session.get(Task, task_id)
         if not task:
             return False
+        
+        # 更新最后运行时间
+        task.last_run = datetime.utcnow()
+        db.session.commit()
+
         script_path = task.script_path.lower()
-        if script_path.endswith('.side'):
-            return execute_selenium_script(task_id)
-        elif script_path.endswith('.py') or script_path.endswith('.autokey'):
-            script_name = Path(task.script_path).stem
-            return execute_autokey_script(script_name)
-        else:
-            logger.error(f"不支持的脚本类型: {script_path}")
+        script_name = Path(task.script_path).name
+        success = False
+        
+        try:
+            if script_path.endswith('.side'):
+                # Selenium IDE
+                success = execute_selenium_script(task.name, task.script_path)
+            elif script_path.endswith('.py'):
+                # Playwright / Python Script
+                success = execute_python_script(task.name, task.script_path)
+            elif script_path.endswith('.ascr'):
+                # Actiona Script
+                success = execute_actiona_script(task.name, task.script_path)
+            elif script_path.endswith('.autokey'):
+                # Legacy AutoKey (Assuming script name mapping)
+                success = execute_autokey_script(Path(task.script_path).stem, task.name)
+            else:
+                logger.error(f"不支持的脚本类型: {script_path}")
+                success = False
+            
+            # 更新最后状态
+            task.last_status = 'Success' if success else 'Failed'
+            db.session.commit()
+            return success
+
+        except Exception as e:
+            logger.error(f"执行任务异常 {task.name}: {e}")
+            task.last_status = 'Error'
+            db.session.commit()
             return False
 
-def execute_selenium_script(task_id):
+def execute_selenium_script(task_name, script_path):
+    """执行 .side 文件"""
     from scripts.task_executor import SeleniumIDEExecutor, send_telegram_notification
-    with app.app_context():
-        task = db.session.get(Task, task_id)
-        if not task:
-            return False
+    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+    
+    executor = SeleniumIDEExecutor(script_path)
+    success, message = executor.execute()
+    
+    if bot_token and chat_id:
+        send_telegram_notification(f"{task_name} (Selenium)", success, message, bot_token, chat_id)
+    return success
+
+def execute_python_script(task_name, script_path):
+    """执行 .py 文件 (Playwright)"""
+    try:
+        env = os.environ.copy()
+        env['DISPLAY'] = ':1' # 确保在 VNC 显示
+        
+        result = subprocess.run(
+            ['python3', script_path],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=env
+        )
+        success = result.returncode == 0
+        log_msg = result.stdout + "\n" + result.stderr
+        
+        if success:
+            logger.info(f"Python脚本 {task_name} 执行成功")
+        else:
+            logger.error(f"Python脚本执行失败: {result.stderr}")
+            
+        # 发送通知
         bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
         chat_id = os.environ.get('TELEGRAM_CHAT_ID')
-        executor = SeleniumIDEExecutor(task.script_path)
-        success, message = executor.execute()
         if bot_token and chat_id:
-            send_telegram_notification(task.name, success, message, bot_token, chat_id)
+            from scripts.task_executor import send_telegram_notification
+            send_telegram_notification(f"{task_name} (Playwright)", success, log_msg[-1000:], bot_token, chat_id)
+            
         return success
+    except Exception as e:
+        logger.error(f"Python脚本执行异常: {e}")
+        return False
 
-def execute_autokey_script(script_name):
+def execute_actiona_script(task_name, script_path):
+    """执行 .ascr 文件 (Actiona)"""
+    try:
+        env = os.environ.copy()
+        env['DISPLAY'] = ':1'
+        
+        # actiona -s script.ascr -e (execute) -C (close when finished if possible, though Actiona GUI might persist)
+        # Actiona 通常需要 GUI，所以我们在 subprocess 中调用
+        result = subprocess.run(
+            ['actiona', '-s', script_path, '-e'],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=env
+        )
+        # Actiona CLI 返回值并不总是可靠，但我们可以检查 stderr
+        success = result.returncode == 0
+        log_msg = f"Actiona Output:\n{result.stdout}\nError:\n{result.stderr}"
+        
+        if success:
+            logger.info(f"Actiona脚本 {task_name} 执行触发成功")
+        else:
+            logger.error(f"Actiona脚本执行失败: {result.stderr}")
+
+        # 发送通知
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+        if bot_token and chat_id:
+            from scripts.task_executor import send_telegram_notification
+            send_telegram_notification(f"{task_name} (Actiona)", success, log_msg[-500:], bot_token, chat_id)
+            
+        return success
+    except Exception as e:
+        logger.error(f"Actiona脚本执行异常: {e}")
+        return False
+
+def execute_autokey_script(script_stem, task_name):
+    """执行 AutoKey 脚本"""
     try:
         result = subprocess.run(
-            ['autokey-run', '-s', script_name],
+            ['autokey-run', '-s', script_stem],
             capture_output=True,
             text=True,
             timeout=300
         )
         success = result.returncode == 0
         if success:
-            logger.info(f"AutoKey脚本 {script_name} 执行成功")
+            logger.info(f"AutoKey脚本 {script_stem} 执行成功")
         else:
             logger.error(f"AutoKey脚本执行失败: {result.stderr}")
+            
         bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
         chat_id = os.environ.get('TELEGRAM_CHAT_ID')
         if bot_token and chat_id:
             from scripts.task_executor import send_telegram_notification
-            send_telegram_notification(script_name, success, result.stdout + result.stderr, bot_token, chat_id)
+            send_telegram_notification(f"{task_name} (AutoKey)", success, result.stdout + result.stderr, bot_token, chat_id)
         return success
     except Exception as e:
         logger.error(f"执行AutoKey脚本异常: {e}")
@@ -271,8 +371,8 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f'加载任务失败 {task.name}: {e}')
     print('='*50)
-    print('Selenium 自动化管理平台已启动')
+    print('自动化全能管理平台已启动')
     print(f'Web 界面: http://0.0.0.0:5000')
-    print(f'默认管理员: {admin_username}')
+    print(f'支持脚本: .side (Selenium), .py (Playwright), .ascr (Actiona)')
     print('='*50)
     app.run(host='0.0.0.0', port=5000, debug=False)
