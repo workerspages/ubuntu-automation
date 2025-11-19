@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Selenium IDE任务执行器
+Selenium IDE任务执行器 (Chrome Edition)
 用于执行.side格式的Selenium脚本文件
 支持可视化执行和反机器人检测
 """
@@ -13,13 +13,20 @@ import logging
 import os
 from pathlib import Path
 from datetime import datetime
+
+# Selenium Imports
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+
+# Driver Manager
+from webdriver_manager.chrome import ChromeDriverManager
+
 import requests
 
 # 配置日志
@@ -44,7 +51,7 @@ HUMAN_LIKE_DELAYS = {
 }
 
 class SeleniumIDEExecutor:
-    """Selenium IDE脚本执行器 - 可视化模式"""
+    """Selenium IDE脚本执行器 - Chrome 可视化模式"""
     
     def __init__(self, script_path):
         self.script_path = script_path
@@ -53,54 +60,64 @@ class SeleniumIDEExecutor:
         self.base_url = ''
         
     def setup_driver(self):
-        """初始化WebDriver - 可视化模式，支持反检测"""
+        """初始化WebDriver - 使用Chrome + 反检测配置"""
         try:
-            # 首先设置 DISPLAY 环境变量
-            os.environ['DISPLAY'] = ':1'
+            # 确保 DISPLAY 变量设置正确，用于 VNC 显示
+            os.environ['DISPLAY'] = os.environ.get('DISPLAY', ':1')
             
             options = Options()
             
-            # 不使用无头模式 - 在VNC中可见
-            # options.add_argument('--headless')  # 注释掉
-            
+            # 基础配置
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--start-maximized')
+            options.add_argument('--disable-gpu')
+            
+            # 反检测配置 (Anti-bot)
             options.add_argument('--disable-blink-features=AutomationControlled')
-            options.set_preference('intl.accept_languages', 'zh-CN')
+            options.add_experimental_option('excludeSwitches', ['enable-automation'])
+            options.add_experimental_option('useAutomationExtension', False)
             
-            # 反检测配置
-            options.set_preference('dom.webdriver.enabled', False)
-            options.set_preference('useAutomationExtension', False)
-            options.set_preference('general.useragent.override', 
-                                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            # 设置 User-Agent (模拟正常浏览器)
+            options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
             
-            self.driver = webdriver.Firefox(options=options)
+            # 使用 webdriver_manager 自动获取匹配的 chromedriver
+            service = Service(ChromeDriverManager().install())
+            
+            self.driver = webdriver.Chrome(service=service, options=options)
             self.driver.implicitly_wait(10)
             
-            # 执行反检测脚本
-            self.driver.execute_script("""
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-                
-                window.navigator.chrome = {
-                    runtime: {}
-                };
-                
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5]
-                });
-                
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['zh-CN', 'zh', 'en']
-                });
-            """)
+            # 执行 CDP 命令进行隐身 (关键反检测步骤)
+            self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+                'source': '''
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                    window.navigator.chrome = {
+                        runtime: {}
+                    };
+                    Object.defineProperty(navigator, 'languages', {
+                        get: () => ['zh-CN', 'zh', 'en']
+                    });
+                    Object.defineProperty(navigator, 'plugins', {
+                        get: () => [1, 2, 3, 4, 5]
+                    });
+                '''
+            })
             
-            logger.info("WebDriver初始化成功（可视化模式 + 反检测）")
+            logger.info("WebDriver (Chrome) 初始化成功")
             return True
         except Exception as e:
-            logger.error(f"WebDriver初始化失败: {e}")
-            return False
+            logger.error(f"WebDriver 初始化失败: {e}")
+            # 尝试 fallback 到系统路径
+            try:
+                logger.info("尝试使用系统路径 /usr/bin/chromedriver ...")
+                service = Service('/usr/bin/chromedriver')
+                self.driver = webdriver.Chrome(service=service, options=options)
+                return True
+            except Exception as e2:
+                logger.error(f"系统路径启动也失败: {e2}")
+                return False
     
     def load_script(self):
         """加载Selenium IDE脚本"""
@@ -147,21 +164,16 @@ class SeleniumIDEExecutor:
             if cmd == 'open':
                 # 智能处理 URL
                 if target.startswith('http://') or target.startswith('https://'):
-                    # 完整 URL
                     url = target
                 elif target.startswith('/'):
-                    # 相对路径
                     if self.base_url:
                         url = self.base_url.rstrip('/') + target
                     else:
-                        # 如果没有 base_url，默认使用百度
                         url = 'https://www.baidu.com' + target
                         logger.warning(f"未设置 base_url，使用默认: {url}")
                 elif target:
-                    # 不带协议的域名
                     url = f"https://{target}"
                 else:
-                    # 空目标，使用 base_url
                     url = self.base_url if self.base_url else 'https://www.baidu.com'
                 
                 logger.info(f"访问 URL: {url}")
@@ -172,7 +184,7 @@ class SeleniumIDEExecutor:
                 # 滚动到元素可见
                 self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
                 time.sleep(HUMAN_LIKE_DELAYS['scroll_delay'])
-                # 移动到元素上
+                # 移动到元素上点击
                 ActionChains(self.driver).move_to_element(element).pause(HUMAN_LIKE_DELAYS['click_delay']).click().perform()
             
             elif cmd == 'type':
@@ -189,16 +201,25 @@ class SeleniumIDEExecutor:
             
             elif cmd == 'sendKeys':
                 element = self.find_element(target)
-                # 逐字输入
-                for char in value:
-                    element.send_keys(char)
-                    time.sleep(random.uniform(0.05, 0.15))
+                # 特殊键处理
+                if value == '${KEY_ENTER}':
+                    element.send_keys(Keys.ENTER)
+                else:
+                    for char in value:
+                        element.send_keys(char)
+                        time.sleep(random.uniform(0.05, 0.15))
             
             elif cmd == 'select':
                 from selenium.webdriver.support.select import Select
                 element = self.find_element(target)
                 select = Select(element)
-                select.select_by_visible_text(value)
+                # 简单的 select strategy 处理
+                if value.startswith('label='):
+                    select.select_by_visible_text(value.replace('label=', ''))
+                elif value.startswith('value='):
+                    select.select_by_value(value.replace('value=', ''))
+                else:
+                    select.select_by_visible_text(value)
             
             elif cmd == 'waitForElementVisible':
                 WebDriverWait(self.driver, 30).until(
@@ -253,22 +274,19 @@ class SeleniumIDEExecutor:
             
             elif cmd == 'setWindowSize':
                 if not value or 'x' not in value:
-                    logger.warning(f"setWindowSize 参数格式错误或为空: {value}")
+                    logger.warning(f"setWindowSize 参数格式错误: {value}")
                     return False
                 sizes = value.split('x')
-                if len(sizes) != 2:
-                    logger.warning(f"setWindowSize 参数数量不对: {value}")
-                    return False
                 try:
                     width = int(sizes[0])
                     height = int(sizes[1])
                     self.driver.set_window_size(width, height)
-                except ValueError as e:
-                    logger.error(f"setWindowSize 转换失败: {value}，错误: {e}")
+                except ValueError:
+                    logger.error(f"setWindowSize 数值转换失败: {value}")
                     return False
             
             else:
-                logger.warning(f"未知命令: {cmd}")
+                logger.warning(f"未知或暂不支持的命令: {cmd}")
             
             return True
             
