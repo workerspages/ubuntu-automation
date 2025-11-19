@@ -203,14 +203,40 @@ def schedule_task(task):
         except Exception as e:
             logger.error(f'调度任务失败: {e}')
 
+def get_desktop_env():
+    """
+    关键函数：读取 VNC 桌面生成的 D-Bus 环境变量文件。
+    这确保了后台进程能连接到前台的 AutoKey 服务。
+    """
+    env = os.environ.copy()
+    env['DISPLAY'] = ':1' # 强制指定显示编号
+    
+    dbus_file = Path('/home/headless/.dbus-env')
+    if dbus_file.exists():
+        try:
+            content = dbus_file.read_text().strip()
+            # 文件内容示例: export DBUS_SESSION_BUS_ADDRESS='unix:abstract=...'
+            if content.startswith('export '):
+                parts = content.replace('export ', '').split('=', 1)
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    value = parts[1].strip().strip("'").strip('"')
+                    env[key] = value
+                    logger.info(f"已加载 D-Bus 地址: {value[:20]}...")
+        except Exception as e:
+            logger.warning(f"读取 .dbus-env 失败: {e}")
+    else:
+        logger.warning("警告: 未找到 .dbus-env 文件，GUI 自动化可能失败")
+    
+    return env
+
 def execute_script(task_id):
-    """核心执行入口：根据后缀分发到不同的执行器"""
+    """核心执行入口"""
     with app.app_context():
         task = db.session.get(Task, task_id)
         if not task:
             return False
         
-        # 更新最后运行时间
         task.last_run = datetime.utcnow()
         db.session.commit()
 
@@ -220,22 +246,18 @@ def execute_script(task_id):
         
         try:
             if script_path.endswith('.side'):
-                # Selenium IDE
                 success = execute_selenium_script(task.name, task.script_path)
             elif script_path.endswith('.py'):
-                # Playwright / Python Script
                 success = execute_python_script(task.name, task.script_path)
             elif script_path.endswith('.ascr'):
-                # Actiona Script
                 success = execute_actiona_script(task.name, task.script_path)
             elif script_path.endswith('.autokey'):
-                # Legacy AutoKey
+                # AutoKey 比较特殊，使用的是去掉后缀的文件名作为脚本名
                 success = execute_autokey_script(Path(task.script_path).stem, task.name)
             else:
                 logger.error(f"不支持的脚本类型: {script_path}")
                 success = False
             
-            # 更新最后状态
             task.last_status = 'Success' if success else 'Failed'
             db.session.commit()
             return success
@@ -247,10 +269,12 @@ def execute_script(task_id):
             return False
 
 def execute_selenium_script(task_name, script_path):
-    """执行 .side 文件"""
     from scripts.task_executor import SeleniumIDEExecutor, send_telegram_notification
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
     chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+    
+    # Selenium/Playwright 脚本内部通常会处理 DISPLAY，但也注入一下以防万一
+    os.environ.update(get_desktop_env())
     
     executor = SeleniumIDEExecutor(script_path)
     success, message = executor.execute()
@@ -260,11 +284,8 @@ def execute_selenium_script(task_name, script_path):
     return success
 
 def execute_python_script(task_name, script_path):
-    """执行 .py 文件 (Playwright)"""
     try:
-        # 确保传递 DISPLAY 变量，使窗口出现在 VNC
-        env = os.environ.copy()
-        env['DISPLAY'] = ':1' 
+        env = get_desktop_env() # 获取包含 D-Bus 的环境
         
         result = subprocess.run(
             ['python3', script_path],
@@ -281,7 +302,6 @@ def execute_python_script(task_name, script_path):
         else:
             logger.error(f"Python脚本执行失败: {result.stderr}")
             
-        # 发送通知
         bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
         chat_id = os.environ.get('TELEGRAM_CHAT_ID')
         if bot_token and chat_id:
@@ -294,13 +314,9 @@ def execute_python_script(task_name, script_path):
         return False
 
 def execute_actiona_script(task_name, script_path):
-    """执行 .ascr 文件 (Actiona)"""
     try:
-        env = os.environ.copy()
-        env['DISPLAY'] = ':1'
+        env = get_desktop_env()
         
-        # -e: 执行脚本
-        # -C: 执行完成后关闭 (虽然 GUI 版可能会残留，但有助于清理)
         result = subprocess.run(
             ['actiona', '-s', script_path, '-e'],
             capture_output=True,
@@ -308,7 +324,6 @@ def execute_actiona_script(task_name, script_path):
             timeout=300,
             env=env
         )
-        # Actiona CLI 返回码不一定标准，主要依赖 stderr 为空来判断
         success = result.returncode == 0
         log_msg = f"Actiona Output:\n{result.stdout}\nError:\n{result.stderr}"
         
@@ -329,22 +344,29 @@ def execute_actiona_script(task_name, script_path):
         return False
 
 def execute_autokey_script(script_stem, task_name):
-    """执行 AutoKey 脚本"""
+    """
+    执行 AutoKey 脚本。
+    核心修复：注入正确的 DBUS_SESSION_BUS_ADDRESS
+    """
     try:
-        # AutoKey 需要 DBus 通信，确保 DISPLAY 正确
-        env = os.environ.copy()
-        env['DISPLAY'] = ':1'
+        env = get_desktop_env()
+        
+        logger.info(f"正在执行 AutoKey 脚本: {script_stem}，环境: {env.get('DBUS_SESSION_BUS_ADDRESS')}")
         
         result = subprocess.run(
             ['autokey-run', '-s', script_stem],
             capture_output=True,
             text=True,
             timeout=300,
-            env=env
+            env=env  # 必须传入这个环境
         )
+        
+        # autokey-run 有时即使成功也可能返回非0，或者没有任何输出
+        # 只要 stderr 没有 "ServiceUnknown" 这种致命错误就算成功
         success = result.returncode == 0
+        
         if success:
-            logger.info(f"AutoKey脚本 {script_stem} 执行成功")
+            logger.info(f"AutoKey脚本 {script_stem} 执行命令发送成功")
         else:
             logger.error(f"AutoKey脚本执行失败: {result.stderr}")
             
@@ -352,7 +374,9 @@ def execute_autokey_script(script_stem, task_name):
         chat_id = os.environ.get('TELEGRAM_CHAT_ID')
         if bot_token and chat_id:
             from scripts.task_executor import send_telegram_notification
-            send_telegram_notification(f"{task_name} (AutoKey)", success, result.stdout + result.stderr, bot_token, chat_id)
+            msg = result.stdout + result.stderr
+            if not msg: msg = "命令已发送 (无控制台输出)"
+            send_telegram_notification(f"{task_name} (AutoKey)", success, msg, bot_token, chat_id)
         return success
     except Exception as e:
         logger.error(f"执行AutoKey脚本异常: {e}")
@@ -378,6 +402,6 @@ if __name__ == '__main__':
     print('='*50)
     print('自动化全能管理平台已启动')
     print(f'Web 界面: http://0.0.0.0:5000')
-    print(f'支持脚本: .side (Selenium), .py (Playwright), .ascr (Actiona)')
+    print(f'支持脚本: .side (Selenium), .py (Playwright), .ascr (Actiona), .autokey')
     print('='*50)
     app.run(host='0.0.0.0', port=5000, debug=False)
