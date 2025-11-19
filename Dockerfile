@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装系统依赖
+# 安装系统依赖 (包含 actiona, unzip, python3)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -73,14 +73,28 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 下载并安装 Selenium IDE 扩展 (修复解压与路径)
+# 下载并安装 Selenium IDE 扩展 (Python 强力解压版)
 # ===================================================================
-# 1. 下载 CRX
-RUN wget --tries=3 -O /tmp/selenium-ide.zip "https://raw.githubusercontent.com/workerspages/ubuntu-automation/aio/addons/selenium-ide.crx" && \
+RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/workerspages/ubuntu-automation/aio/addons/selenium-ide.crx" && \
     mkdir -p /opt/selenium-ide-unpacked && \
-    # 2. 使用 unzip 解压 (即使有 CRX 头警告也会继续)
-    (unzip -q /tmp/selenium-ide.zip -d /opt/selenium-ide-unpacked || echo "CRX unzip warning ignored") && \
-    # 3. 目录结构修正: 查找 manifest.json 是否在子目录，如果是则移动到根目录
+    # --- 关键修改：使用 Python 读取二进制流，跳过 CRX 头部，精准定位 Zip 起始位置 ---
+    python3 -c "import zipfile, io, sys; \
+f = open('/tmp/selenium-ide.crx', 'rb'); \
+data = f.read(); \
+f.close(); \
+# 查找 Zip 文件头 (PK\x03\x04)
+pos = data.find(b'PK\x03\x04'); \
+if pos == -1: \
+    print('Error: Not a valid Zip/CRX file'); \
+    sys.exit(1); \
+try: \
+    z = zipfile.ZipFile(io.BytesIO(data[pos:])); \
+    z.extractall('/opt/selenium-ide-unpacked'); \
+    print('Extracted successfully'); \
+except Exception as e: \
+    print(f'Unzip failed: {e}'); \
+    sys.exit(1);" && \
+    # --- 目录结构修正 ---
     if [ ! -f "/opt/selenium-ide-unpacked/manifest.json" ]; then \
         SUBDIR=$(find /opt/selenium-ide-unpacked -name "manifest.json" -printf "%h\n" | head -1); \
         if [ -n "$SUBDIR" ]; then \
@@ -88,14 +102,14 @@ RUN wget --tries=3 -O /tmp/selenium-ide.zip "https://raw.githubusercontent.com/w
             mv "$SUBDIR"/* /opt/selenium-ide-unpacked/; \
         fi; \
     fi && \
-    # 4. 验证文件是否存在 (构建时检查)
+    # 验证
     ls -l /opt/selenium-ide-unpacked/manifest.json && \
-    # 5. 修正权限
+    # 修正权限
     chown -R headless:headless /opt/selenium-ide-unpacked && \
-    rm /tmp/selenium-ide.zip
+    rm /tmp/selenium-ide.crx
 
 # ===================================================================
-# 配置 Chrome 启动包装器 (包含加载插件)
+# 配置 Chrome 启动包装器 (强制加载插件 + No-Sandbox)
 # ===================================================================
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
