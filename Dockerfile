@@ -39,7 +39,9 @@ ENV TZ=Asia/Shanghai \
     XDG_CONFIG_DIRS=/etc/xdg/xfce4:/etc/xdg \
     XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share \
     XDG_CURRENT_DESKTOP=XFCE \
-    XDG_SESSION_DESKTOP=xfce
+    XDG_SESSION_DESKTOP=xfce \
+    # --- 关键新增：指定 Playwright 浏览器安装到公共目录 ---
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 
 # ===================================================================
 # 安装系统依赖 (包含 actiona, p7zip-full)
@@ -73,7 +75,7 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 配置 Chrome 启动包装器 (No-Sandbox, 不加载插件)
+# 配置 Chrome 启动包装器 (No-Sandbox)
 # ===================================================================
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
@@ -201,9 +203,14 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY web-app/requirements.txt /app/web-app/
-RUN pip install --no-cache-dir wheel setuptools && \
+# 1. 创建公共目录
+RUN mkdir -p /opt/playwright && \
+    pip install --no-cache-dir wheel setuptools && \
     pip install --no-cache-dir -r /app/web-app/requirements.txt && \
-    playwright install chromium
+    # 2. 安装浏览器到公共目录
+    playwright install chromium && \
+    # 3. 关键：赋予 headless 用户权限
+    chmod -R 777 /opt/playwright
 
 # ===================================================================
 # 复制应用代码和配置
@@ -265,7 +272,7 @@ autorestart=true
 stdout_logfile=/app/logs/webapp.log
 stderr_logfile=/app/logs/webapp-error.log
 user=headless
-environment=HOME="/home/headless",USER="headless",PATH="/opt/venv/bin:%(ENV_PATH)s",DISPLAY=":1"
+environment=HOME="/home/headless",USER="headless",PATH="/opt/venv/bin:%(ENV_PATH)s",DISPLAY=":1",PLAYWRIGHT_BROWSERS_PATH="/opt/playwright"
 priority=40
 EOF
 
@@ -310,7 +317,7 @@ EOF
 RUN chmod +x /usr/local/bin/init-database
 
 # ===================================================================
-# Entrypoint脚本 (关键修复: 启动前修正数据库权限)
+# Entrypoint脚本
 # ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
@@ -328,7 +335,7 @@ else
     echo "❌ Google Chrome 未找到"
 fi
 
-# 配置 VNC 密码 (动态生成)
+# 配置 VNC 密码
 echo "配置 VNC 密码..."
 mkdir -p /home/headless/.vnc
 chown headless:headless /home/headless/.vnc
@@ -339,11 +346,9 @@ chown headless:headless /home/headless/.vnc/passwd
 echo "VNC密码文件已生成"
 
 mkdir -p /app/data /app/logs /home/headless/Downloads
-# 预先设置目录权限
 chown -R headless:headless /app /home/headless /opt/venv
 
 echo "初始化数据库..."
-# 初始化脚本会以 root 身份运行并创建 tasks.db
 /usr/local/bin/init-database || {
     echo "数据库初始化备用方法..."
     cd /app/web-app
@@ -373,8 +378,6 @@ PYEOF
 }
 
 echo "修正数据库权限..."
-# 关键步骤：初始化后，必须将数据库文件所有权移交给 headless 用户
-# 否则 WebApp (运行为 headless) 无法写入 root 创建的 db 文件
 chown -R headless:headless /app/data
 
 echo "==================================="
