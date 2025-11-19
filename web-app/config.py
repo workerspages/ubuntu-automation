@@ -26,9 +26,8 @@ class Config:
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
     LOG_FILE = '/app/data/automation.log'
     
-    # Firefox配置
-    FIREFOX_BINARY = '/usr/bin/firefox'
-    GECKODRIVER_PATH = '/usr/bin/geckodriver'
+    # Chrome配置 (标准化为 Chrome)
+    CHROME_BINARY = '/usr/bin/google-chrome-stable'
     
     # Web应用配置
     HOST = '0.0.0.0'
