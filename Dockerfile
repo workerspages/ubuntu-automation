@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装系统依赖
+# 安装系统依赖 (增加 actiona)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -60,6 +60,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
+    # --- 新增 Actiona ---
+    actiona \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
@@ -70,14 +72,10 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     apt-get install -y /tmp/chrome.deb && \
     rm /tmp/chrome.deb && \
     rm -rf /var/lib/apt/lists/* && \
-    # --- 关键修复：创建 Chrome 启动包装器 ---
-    # 1. 备份原程序
+    # 创建 Chrome 启动包装器
     mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
-    # 2. 创建新脚本：强制添加 --no-sandbox 和 --load-extension
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
-    # 注意：这里添加了 --load-extension=/opt/selenium-ide-unpacked
     echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu --load-extension=/opt/selenium-ide-unpacked "$@"' >> /usr/bin/google-chrome-stable && \
-    # 3. 赋予执行权限
     chmod +x /usr/bin/google-chrome-stable
 
 # ===================================================================
@@ -87,7 +85,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 安装AutoKey (使用官方源)
+# 安装AutoKey
 # ===================================================================
 RUN apt-get update && \
     apt-get install -y autokey-gtk && \
@@ -114,12 +112,11 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 下载并解压 Selenium IDE 扩展 (修复权限)
+# 下载并解压 Selenium IDE 扩展
 # ===================================================================
 RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/workerspages/ubuntu-automation/aio/addons/selenium-ide.crx" && \
     mkdir -p /opt/selenium-ide-unpacked && \
     python3 -c "import zipfile; zf = zipfile.ZipFile('/tmp/selenium-ide.crx'); zf.extractall('/opt/selenium-ide-unpacked'); zf.close()" && \
-    # --- 关键修复：将插件目录所有权交给 headless 用户，防止权限拒绝 ---
     chown -R headless:headless /opt/selenium-ide-unpacked && \
     rm /tmp/selenium-ide.crx
 
@@ -211,12 +208,9 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY web-app/requirements.txt /app/web-app/
-# 1. 安装 Python 库
 RUN pip install --no-cache-dir wheel setuptools && \
-    pip install --no-cache-dir -r /app/web-app/requirements.txt
-
-# 2. 安装 Playwright 浏览器 (Chromium)
-RUN playwright install chromium
+    pip install --no-cache-dir -r /app/web-app/requirements.txt && \
+    playwright install chromium
 
 # ===================================================================
 # 复制应用代码和配置
