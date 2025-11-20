@@ -82,11 +82,12 @@ RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     chmod +x /usr/bin/google-chrome-stable
 
 # ===================================================================
-# 关闭 Chrome 对命令行标记的警告（包括 --no-sandbox 提示）
+# 关闭 Chrome 对命令行标记的安全横幅（含 --no-sandbox 提示）
 # ===================================================================
 RUN mkdir -p /etc/opt/chrome/policies/managed && \
     printf '{ "CommandLineFlagSecurityWarningsEnabled": false }\n' \
-      > /etc/opt/chrome/policies/managed/disable_flag_warning.json
+      > /etc/opt/chrome/policies/managed/disable_flag_warning.json && \
+    chmod 644 /etc/opt/chrome/policies/managed/disable_flag_warning.json
 
 # ===================================================================
 # 设置时区和语言
