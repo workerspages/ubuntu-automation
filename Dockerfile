@@ -62,6 +62,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
     actiona p7zip-full \
+    # +++ 新增 Firefox 和中文语言包 +++
+    firefox firefox-locale-zh-hans \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
@@ -88,6 +90,31 @@ RUN mkdir -p /etc/opt/chrome/policies/managed && \
     printf '{ "CommandLineFlagSecurityWarningsEnabled": false }\n' \
       > /etc/opt/chrome/policies/managed/disable_flag_warning.json && \
     chmod 644 /etc/opt/chrome/policies/managed/disable_flag_warning.json
+
+# +++ 新增部分：配置 Firefox +++
+# ===================================================================
+# 1. 复制插件文件到镜像内
+# ===================================================================
+COPY firefox-plugin/ /app/firefox-plugin/
+
+# ===================================================================
+# 2. 创建 Firefox 策略文件，强制安装插件并设置语言
+#    这是现代 Firefox 中最可靠的全局配置方法
+# ===================================================================
+RUN mkdir -p /etc/firefox/policies && \
+    cat << 'EOF' > /etc/firefox/policies/policies.json
+{
+  "policies": {
+    "DisplayLang": "zh-CN",
+    "Extensions": {
+      "Install": [
+        "file:///app/firefox-plugin/selenium-ide.xpi"
+      ]
+    },
+    "AppUpdateURL": "https://0.0.0.0/never-update"
+  }
+}
+EOF
 
 # ===================================================================
 # 设置时区和语言
@@ -223,7 +250,8 @@ COPY web-app/requirements.txt /app/web-app/
 RUN mkdir -p /opt/playwright && \
     pip install --no-cache-dir wheel setuptools && \
     pip install --no-cache-dir -r /app/web-app/requirements.txt && \
-    playwright install chromium && \
+    # 同时安装 chromium 和 firefox 的 playwright 驱动
+    playwright install chromium firefox && \
     chmod -R 777 /opt/playwright
 
 # ===================================================================
@@ -236,7 +264,7 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # [关键修改] 强制刷新缓存并复制本地脚本
 # -------------------------------------------------------------------
 # 这一行会强制 Docker 认为这层之后都是新的，必须重新构建
-RUN echo "Force Rebuild 2025-11-20-FIX-02" > /dev/null
+RUN echo "Force Rebuild 2025-11-20-FIX-03" > /dev/null
 
 # 复制本地的 scripts 目录（包含已修复 Cloudflare 逻辑的 entrypoint.sh）
 COPY scripts/ /app/scripts/
