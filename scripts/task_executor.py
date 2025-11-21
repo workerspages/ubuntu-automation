@@ -126,6 +126,7 @@ class SeleniumIDEExecutor:
             service = Service(ChromeDriverManager().install())
             
             self.driver = webdriver.Chrome(service=service, options=options)
+            self.driver.maximize_window()
             self.driver.implicitly_wait(10)
             
             # 执行 CDP 命令进行隐身
