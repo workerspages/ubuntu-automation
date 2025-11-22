@@ -272,7 +272,7 @@ def execute_script(task_id):
 
 # --- 1. 执行 Selenium IDE (.side) ---
 def execute_selenium_script(task_name, script_path):
-    from scripts.task_executor import SeleniumIDEExecutor, send_telegram_notification
+    from scripts.task_executor import SeleniumIDEExecutor, send_telegram_notification, send_email_notification
     bot_token, chat_id = get_telegram_config()
     
     # 注入桌面环境
@@ -282,8 +282,13 @@ def execute_selenium_script(task_name, script_path):
         executor = SeleniumIDEExecutor(script_path)
         success, message = executor.execute()
         
+        # 发送 Telegram
         if bot_token and chat_id:
             send_telegram_notification(f"{task_name} (Selenium)", success, message, bot_token, chat_id)
+        
+        # 发送邮件
+        send_email_notification(f"{task_name} (Selenium)", success, message)
+        
         return success
     except Exception as e:
         logger.error(f"Selenium执行错误: {e}")
@@ -311,9 +316,14 @@ def execute_python_script(task_name, script_path):
         else:
             logger.error(f"Python脚本执行失败: {result.stderr}")
             
+        from scripts.task_executor import send_telegram_notification, send_email_notification
+        
+        # 发送 Telegram
         if bot_token and chat_id:
-            from scripts.task_executor import send_telegram_notification
             send_telegram_notification(f"{task_name} (Playwright)", success, log_msg, bot_token, chat_id)
+            
+        # 发送邮件
+        send_email_notification(f"{task_name} (Playwright)", success, log_msg)
             
         return success
     except Exception as e:
@@ -343,9 +353,14 @@ def execute_actiona_script(task_name, script_path):
         else:
             logger.error(f"Actiona脚本执行失败: {result.stderr}")
 
+        from scripts.task_executor import send_telegram_notification, send_email_notification
+        
+        # 发送 Telegram
         if bot_token and chat_id:
-            from scripts.task_executor import send_telegram_notification
             send_telegram_notification(f"{task_name} (Actiona)", success, log_msg, bot_token, chat_id)
+        
+        # 发送邮件
+        send_email_notification(f"{task_name} (Actiona)", success, log_msg)
             
         return success
     except Exception as e:
@@ -376,9 +391,15 @@ def execute_autokey_script(script_stem, task_name):
         else:
             logger.error(f"AutoKey脚本执行失败: {result.stderr}")
             
+        from scripts.task_executor import send_telegram_notification, send_email_notification
+        
+        # 发送 Telegram
         if bot_token and chat_id:
-            from scripts.task_executor import send_telegram_notification
             send_telegram_notification(f"{task_name} (AutoKey)", success, log_msg, bot_token, chat_id)
+            
+        # 发送邮件
+        send_email_notification(f"{task_name} (AutoKey)", success, log_msg)
+
         return success
     except Exception as e:
         logger.error(f"AutoKey执行异常: {e}")
