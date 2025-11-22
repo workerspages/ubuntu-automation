@@ -62,13 +62,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
     actiona p7zip-full \
-    # +++ 新增 Firefox 和中文语言包 +++
     firefox firefox-locale-zh-hans \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    # +++ 验证 Firefox 是否安装成功 +++
     && ls -l /usr/bin/firefox
 
-# +++ 关键修复：为 Firefox 创建桌面快捷方式文件 +++
+# +++ 关键修复 1：创建 Firefox 启动器脚本 +++
+# ===================================================================
+RUN cat << 'EOF' > /usr/local/bin/firefox-launcher
+#!/bin/bash
+export DISPLAY=:1
+exec /usr/bin/firefox --no-remote --disable-gpu "$@"
+EOF
+RUN chmod +x /usr/local/bin/firefox-launcher
+
+# +++ 关键修复 2：修改桌面快捷方式文件，使其指向启动器脚本 +++
 # ===================================================================
 RUN cat << 'EOF' > /usr/share/applications/firefox.desktop
 [Desktop Entry]
@@ -77,7 +84,7 @@ Name=Firefox
 Name[zh_CN]=火狐浏览器
 Comment=Browse the World Wide Web
 GenericName=Web Browser
-Exec=/usr/bin/firefox %u
+Exec=/usr/local/bin/firefox-launcher %u
 Terminal=false
 Type=Application
 Icon=firefox
@@ -111,16 +118,11 @@ RUN mkdir -p /etc/opt/chrome/policies/managed && \
       > /etc/opt/chrome/policies/managed/disable_flag_warning.json && \
     chmod 644 /etc/opt/chrome/policies/managed/disable_flag_warning.json
 
-# +++ 新增部分：配置 Firefox +++
 # ===================================================================
-# 1. 复制插件文件到镜像内
+# 配置 Firefox 插件
 # ===================================================================
 COPY firefox-plugin/ /app/firefox-plugin/
 
-# ===================================================================
-# 2. 创建 Firefox 策略文件，强制安装插件并设置语言
-#    这是现代 Firefox 中最可靠的全局配置方法
-# ===================================================================
 RUN mkdir -p /etc/firefox/policies && \
     cat << 'EOF' > /etc/firefox/policies/policies.json
 {
@@ -270,7 +272,6 @@ COPY web-app/requirements.txt /app/web-app/
 RUN mkdir -p /opt/playwright && \
     pip install --no-cache-dir wheel setuptools && \
     pip install --no-cache-dir -r /app/web-app/requirements.txt && \
-    # +++ 同时安装 chromium 和 firefox 的 playwright 驱动 +++
     playwright install chromium firefox && \
     chmod -R 777 /opt/playwright
 
@@ -279,14 +280,6 @@ RUN mkdir -p /opt/playwright && \
 # ===================================================================
 COPY web-app/ /app/web-app/
 COPY nginx.conf /etc/nginx/nginx.conf
-
-# -------------------------------------------------------------------
-# [关键修改] 强制刷新缓存并复制本地脚本
-# -------------------------------------------------------------------
-# 这一行会强制 Docker 认为这层之后都是新的，必须重新构建
-RUN echo "Force Rebuild 2025-11-20-FIX-03" > /dev/null
-
-# 复制本地的 scripts 目录（包含已修复 Cloudflare 逻辑的 entrypoint.sh）
 COPY scripts/ /app/scripts/
 
 # ===================================================================
