@@ -43,11 +43,22 @@ ENV TZ=Asia/Shanghai \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 
 # ===================================================================
-# 安装系统依赖
+# 核心修复：准备 PPA 环境以安装非 Snap 版 Firefox
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl wget git vim nano sudo tzdata locales \
-    software-properties-common gnupg2 apt-transport-https net-tools \
+    software-properties-common gnupg2 wget curl ca-certificates
+
+# 添加 Mozilla Team PPA 并设置优先级，强制使用 deb 版本而非 Snap
+RUN add-apt-repository -y ppa:mozillateam/ppa && \
+    echo 'Package: *' > /etc/apt/preferences.d/mozilla-firefox && \
+    echo 'Pin: release o=LP-PPA-mozillateam' >> /etc/apt/preferences.d/mozilla-firefox && \
+    echo 'Pin-Priority: 1001' >> /etc/apt/preferences.d/mozilla-firefox
+
+# ===================================================================
+# 安装系统依赖 (含 Firefox .deb 版本)
+# ===================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git vim nano sudo tzdata locales net-tools \
     iproute2 iputils-ping supervisor cron sqlite3 fonts-wqy-microhei \
     fonts-wqy-zenhei fonts-noto-cjk fonts-noto-cjk-extra language-pack-zh-hans \
     x11-utils x11-xserver-utils x11-apps xauth xserver-xorg-core xserver-xorg-video-dummy \
@@ -64,7 +75,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     actiona p7zip-full \
     firefox firefox-locale-zh-hans \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && ls -l /usr/bin/firefox
+    && echo "Firefox installed version:" && firefox --version
 
 # +++ 关键修复 1：创建 Firefox 启动器脚本 +++
 # ===================================================================
@@ -77,7 +88,8 @@ RUN chmod +x /usr/local/bin/firefox-launcher
 
 # +++ 关键修复 2：修改桌面快捷方式文件，使其指向启动器脚本 +++
 # ===================================================================
-RUN cat << 'EOF' > /usr/share/applications/firefox.desktop
+RUN mkdir -p /usr/share/applications && \
+    cat << 'EOF' > /usr/share/applications/firefox.desktop
 [Desktop Entry]
 Version=1.0
 Name=Firefox
@@ -119,7 +131,7 @@ RUN mkdir -p /etc/opt/chrome/policies/managed && \
     chmod 644 /etc/opt/chrome/policies/managed/disable_flag_warning.json
 
 # ===================================================================
-# 配置 Firefox 插件
+# 配置 Firefox 插件 (可选，需确保本地有此目录，否则可注释掉)
 # ===================================================================
 COPY firefox-plugin/ /app/firefox-plugin/
 
