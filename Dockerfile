@@ -250,7 +250,7 @@ COPY web-app/requirements.txt /app/web-app/
 RUN mkdir -p /opt/playwright && \
     pip install --no-cache-dir wheel setuptools && \
     pip install --no-cache-dir -r /app/web-app/requirements.txt && \
-    # 同时安装 chromium 和 firefox 的 playwright 驱动
+    # +++ 同时安装 chromium 和 firefox 的 playwright 驱动 +++
     playwright install chromium firefox && \
     chmod -R 777 /opt/playwright
 
