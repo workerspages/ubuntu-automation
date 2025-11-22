@@ -64,7 +64,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     actiona p7zip-full \
     # +++ 新增 Firefox 和中文语言包 +++
     firefox firefox-locale-zh-hans \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    # +++ 验证 Firefox 是否安装成功 +++
+    && ls -l /usr/bin/firefox
+
+# +++ 关键修复：为 Firefox 创建桌面快捷方式文件 +++
+# ===================================================================
+RUN cat << 'EOF' > /usr/share/applications/firefox.desktop
+[Desktop Entry]
+Version=1.0
+Name=Firefox
+Name[zh_CN]=火狐浏览器
+Comment=Browse the World Wide Web
+GenericName=Web Browser
+Exec=/usr/bin/firefox %u
+Terminal=false
+Type=Application
+Icon=firefox
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+EOF
 
 # ===================================================================
 # 安装 Google Chrome
@@ -365,11 +385,6 @@ except Exception as e:
 EOF
 
 RUN chmod +x /usr/local/bin/init-database
-
-# ===================================================================
-# ⚠️ 注意：这里删除了原来的 RUN cat ... entrypoint.sh 块
-# 之前的问题就是这里重新生成了一个旧文件，覆盖了 COPY 进去的新文件
-# ===================================================================
 
 # ===================================================================
 # 设置权限及端口暴露
