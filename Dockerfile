@@ -77,6 +77,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && echo "Firefox installed version:" && firefox --version
 
+# ===================================================================
+# +++ 新增：彻底卸载屏保程序 (防止长时间运行后锁屏) +++
+# ===================================================================
+RUN apt-get purge -y xfce4-screensaver gnome-screensaver xscreensaver && \
+    apt-get autoremove -y
+
 # +++ 关键修复 1：创建 Firefox 启动器脚本 +++
 # ===================================================================
 RUN cat << 'EOF' > /usr/local/bin/firefox-launcher
@@ -238,7 +244,7 @@ RUN mkdir -p /home/headless/.config/google-chrome && \
     chown -R headless:headless /home/headless/.config /home/headless/.mozilla
 
 # ===================================================================
-# VNC xstartup脚本
+# VNC xstartup脚本 (含防休眠命令)
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc && \
     chown headless:headless /home/headless/.vnc
@@ -259,6 +265,7 @@ chmod 644 $HOME/.dbus-env
 [ -r /etc/X11/Xresources ] && xrdb /etc/X11/Xresources
 [ -r "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
 
+# 核心：设置 X11 背景并禁用屏保、电源管理信号
 xsetroot -solid grey &
 xset s off &
 xset -dpms &
@@ -296,7 +303,7 @@ RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc && \
     ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
 # ===================================================================
-# X11和XFCE配置
+# X11和XFCE配置 (增强防休眠配置)
 # ===================================================================
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && \
     chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix && \
@@ -305,6 +312,7 @@ RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && \
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     chown -R headless:headless /home/headless/.config
 
+# 配置电源管理器：强制演示模式，禁止任何睡眠/休眠动作
 RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-power-manager" version="1.0">
@@ -314,16 +322,9 @@ RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4
     <property name="dpms-enabled" type="bool" value="false"/>
     <property name="dpms-on-ac-sleep" type="uint" value="0"/>
     <property name="dpms-on-ac-off" type="uint" value="0"/>
-  </property>
-</channel>
-EOF
-
-RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xfce4-screensaver" version="1.0">
-  <property name="saver" type="empty">
-    <property name="enabled" type="bool" value="false"/>
-    <property name="mode" type="int" value="0"/>
+    <property name="inactivity-on-ac" type="uint" value="14"/>
+    <property name="lock-screen-suspend-hibernate" type="bool" value="false"/>
+    <property name="presentation-mode" type="bool" value="true"/>
   </property>
 </channel>
 EOF
