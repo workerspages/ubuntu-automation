@@ -55,7 +55,7 @@ RUN add-apt-repository -y ppa:mozillateam/ppa && \
     echo 'Pin-Priority: 1001' >> /etc/apt/preferences.d/mozilla-firefox
 
 # ===================================================================
-# 安装系统依赖 (含 Firefox .deb 版本)
+# 安装系统依赖 (含 Firefox .deb 版本) & 卸载屏保
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git vim nano sudo tzdata locales net-tools \
@@ -74,14 +74,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
     actiona p7zip-full \
     firefox firefox-locale-zh-hans \
+    # === 在清理缓存前执行卸载 ===
+    && apt-get purge -y xfce4-screensaver gnome-screensaver xscreensaver \
+    && apt-get autoremove -y \
+    # ==========================
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && echo "Firefox installed version:" && firefox --version
-
-# ===================================================================
-# +++ 新增：彻底卸载屏保程序 (防止长时间运行后锁屏) +++
-# ===================================================================
-RUN apt-get purge -y xfce4-screensaver gnome-screensaver xscreensaver && \
-    apt-get autoremove -y
 
 # +++ 关键修复 1：创建 Firefox 启动器脚本 +++
 # ===================================================================
