@@ -55,7 +55,7 @@ RUN add-apt-repository -y ppa:mozillateam/ppa && \
     echo 'Pin-Priority: 1001' >> /etc/apt/preferences.d/mozilla-firefox
 
 # ===================================================================
-# 安装系统依赖 (含 Firefox .deb 版本) & 卸载屏保
+# 安装系统依赖 (含 Firefox .deb 版本)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git vim nano sudo tzdata locales net-tools \
@@ -74,10 +74,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
     actiona p7zip-full \
     firefox firefox-locale-zh-hans \
-    # === 在清理缓存前执行卸载 ===
-    && apt-get purge -y xfce4-screensaver gnome-screensaver xscreensaver \
-    && apt-get autoremove -y \
-    # ==========================
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && echo "Firefox installed version:" && firefox --version
 
@@ -119,11 +115,11 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 配置 Chrome 启动包装器 (No-Sandbox + 禁止默认浏览器检查)
+# 配置 Chrome 启动包装器 (No-Sandbox)
 # ===================================================================
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
-    echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu --no-default-browser-check --no-first-run "$@"' >> /usr/bin/google-chrome-stable && \
+    echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu "$@"' >> /usr/bin/google-chrome-stable && \
     chmod +x /usr/bin/google-chrome-stable
 
 # ===================================================================
@@ -147,18 +143,12 @@ RUN mkdir -p /etc/xdg && \
     } >> /etc/xdg/mimeapps.list
 
 # ===================================================================
-# 配置 Chrome 企业策略 (禁用默认浏览器检查、禁用安全横幅、禁用首次运行欢迎页)
+# 关闭 Chrome 对命令行标记的安全横幅（含 --no-sandbox 提示）
 # ===================================================================
 RUN mkdir -p /etc/opt/chrome/policies/managed && \
-    echo '{ \
-      "CommandLineFlagSecurityWarningsEnabled": false, \
-      "DefaultBrowserSettingEnabled": false, \
-      "MetricsReportingEnabled": false, \
-      "RestoreOnStartup": 4, \
-      "WelcomePageOnOSUpgradeEnabled": false, \
-      "CheckDefaultBrowser": false \
-    }' > /etc/opt/chrome/policies/managed/managed_policies.json && \
-    chmod 644 /etc/opt/chrome/policies/managed/managed_policies.json
+    printf '{ "CommandLineFlagSecurityWarningsEnabled": false }\n' \
+      > /etc/opt/chrome/policies/managed/disable_flag_warning.json && \
+    chmod 644 /etc/opt/chrome/policies/managed/disable_flag_warning.json
 
 # ===================================================================
 # 配置 Firefox 插件 (可选，需确保本地有此目录，否则可注释掉)
@@ -242,7 +232,7 @@ RUN mkdir -p /home/headless/.config/google-chrome && \
     chown -R headless:headless /home/headless/.config /home/headless/.mozilla
 
 # ===================================================================
-# VNC xstartup脚本 (含防休眠命令)
+# VNC xstartup脚本
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc && \
     chown headless:headless /home/headless/.vnc
@@ -263,7 +253,6 @@ chmod 644 $HOME/.dbus-env
 [ -r /etc/X11/Xresources ] && xrdb /etc/X11/Xresources
 [ -r "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
 
-# 核心：设置 X11 背景并禁用屏保、电源管理信号
 xsetroot -solid grey &
 xset s off &
 xset -dpms &
@@ -301,7 +290,7 @@ RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc && \
     ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
 # ===================================================================
-# X11和XFCE配置 (增强防休眠配置)
+# X11和XFCE配置
 # ===================================================================
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && \
     chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix && \
@@ -310,7 +299,6 @@ RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && \
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     chown -R headless:headless /home/headless/.config
 
-# 配置电源管理器：强制演示模式，禁止任何睡眠/休眠动作
 RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-power-manager" version="1.0">
@@ -320,9 +308,16 @@ RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4
     <property name="dpms-enabled" type="bool" value="false"/>
     <property name="dpms-on-ac-sleep" type="uint" value="0"/>
     <property name="dpms-on-ac-off" type="uint" value="0"/>
-    <property name="inactivity-on-ac" type="uint" value="14"/>
-    <property name="lock-screen-suspend-hibernate" type="bool" value="false"/>
-    <property name="presentation-mode" type="bool" value="true"/>
+  </property>
+</channel>
+EOF
+
+RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-screensaver" version="1.0">
+  <property name="saver" type="empty">
+    <property name="enabled" type="bool" value="false"/>
+    <property name="mode" type="int" value="0"/>
   </property>
 </channel>
 EOF
