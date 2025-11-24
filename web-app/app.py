@@ -46,7 +46,8 @@ class Task(db.Model):
     enabled = db.Column(db.Boolean, default=True)
     last_run = db.Column(db.DateTime)
     last_status = db.Column(db.String(50))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # 修改点 1: 使用 datetime.now 确保创建时间符合系统时区
+    created_at = db.Column(db.DateTime, default=datetime.now)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -240,7 +241,8 @@ def execute_script(task_id):
         task = db.session.get(Task, task_id)
         if not task: return False
         
-        task.last_run = datetime.utcnow()
+        # 修改点 2: 使用 datetime.now() 获取当前系统时间(含时区修正)
+        task.last_run = datetime.now()
         db.session.commit()
 
         script_path = task.script_path.lower()
